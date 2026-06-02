@@ -2,6 +2,7 @@
 target/
 *.rs.bk
 .cargo/
+.sqlx/
 
 # Node/npm
 node_modules/
