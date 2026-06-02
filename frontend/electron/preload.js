@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('electron', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getAppPath: () => ipcRenderer.invoke('get-app-path'),
+  getDisplayMedia: () => ipcRenderer.invoke('get-display-media'),
 })
 
 contextBridge.exposeInMainWorld('api', {

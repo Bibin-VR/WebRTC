@@ -54,3 +54,17 @@ app.on('activate', () => {
 // IPC handlers for desktop APIs
 ipcMain.handle('get-app-version', () => app.getVersion())
 ipcMain.handle('get-app-path', () => app.getAppPath())
+
+// Screen capture for screen sharing
+ipcMain.handle('get-display-media', async () => {
+  const { desktopCapturer } = require('electron')
+  const sources = await desktopCapturer.getSources({
+    types: ['window', 'screen'],
+  })
+
+  return sources.map((source) => ({
+    id: source.id,
+    name: source.name,
+    thumbnail: source.thumbnail.toDataURL(),
+  }))
+})

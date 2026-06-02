@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../hooks/useAuth'
-import { usersApi, devicesApi } from '../services/api'
+import { usersApi, devicesApi, sessionsApi } from '../services/api'
 import { wsClient } from '../services/websocket'
 import './Dashboard.css'
 
 export const Dashboard = () => {
+  const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const [users, setUsers] = useState([])
   const [devices, setDevices] = useState([])
@@ -12,6 +14,7 @@ export const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [wsConnected, setWsConnected] = useState(false)
+  const [initiatingCall, setInitiatingCall] = useState(null)
 
   useEffect(() => {
     initDashboard()
@@ -71,6 +74,30 @@ export const Dashboard = () => {
 
   const handleLogout = async () => {
     await logout()
+  }
+
+  const handleInitiateCall = async (targetUserId, targetDeviceId) => {
+    setInitiatingCall(targetDeviceId)
+    try {
+      const userDevice = devices[0]
+      if (!userDevice) {
+        alert('No device registered. Please register a device first.')
+        return
+      }
+
+      const res = await sessionsApi.create(
+        targetUserId,
+        targetDeviceId,
+        userDevice.id,
+      )
+      const sessionId = res.data.id
+
+      navigate(`/call/${sessionId}`)
+    } catch (error) {
+      console.error('Failed to initiate call:', error)
+      alert('Failed to initiate call')
+      setInitiatingCall(null)
+    }
   }
 
   if (loading) {
@@ -150,8 +177,22 @@ export const Dashboard = () => {
                         </div>
                       ))}
                     </div>
-                    {u.devices?.some((d) => d.is_online) && (
-                      <button className="btn btn-sm btn-primary">Connect</button>
+                    {u.devices?.map(
+                      (device) =>
+                        device.is_online && (
+                          <button
+                            key={device.device_id}
+                            className="btn btn-sm btn-primary"
+                            onClick={() =>
+                              handleInitiateCall(u.user_id, device.device_id)
+                            }
+                            disabled={initiatingCall === device.device_id}
+                          >
+                            {initiatingCall === device.device_id
+                              ? 'Calling...'
+                              : 'Call'}
+                          </button>
+                        ),
                     )}
                   </div>
                 ))}
