@@ -1,0 +1,86 @@
+# Rust
+target/
+Cargo.lock
+*.rs.bk
+.cargo/
+
+# Node/npm
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm
+dist/
+build/
+
+# Electron
+main/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# SSL/TLS
+ssl/
+*.pem
+*.crt
+*.key
+
+# Temp files
+tmp/
+temp/
+.tmp/
+
+# Docker
+docker-compose.override.yml
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+
+# Coverage
+coverage/
+.coverage
+
+# Test results
+test-results/
+junit.xml
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Security
+.env.production
+secrets/
+
+# Cache
+.cache/
+cache/
