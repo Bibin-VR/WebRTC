@@ -1,7 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useAuthStore } from '../hooks/useAuth'
 import { useParams, useNavigate } from 'react-router-dom'
-import { sessionsApi } from '../services/api'
 import { wsClient } from '../services/websocket'
 import { WebRTCManager } from '../services/webrtc'
 import { ScreenShareManager } from '../services/screenShare'
@@ -13,7 +11,6 @@ import './CallPage.css'
 export const CallPage = () => {
   const navigate = useNavigate()
   const { sessionId } = useParams()
-  const { user } = useAuthStore()
 
   const [localStream, setLocalStream] = useState(null)
   const [remoteStream, setRemoteStream] = useState(null)
@@ -105,7 +102,7 @@ export const CallPage = () => {
     const success = await fileTransferManager.current.sendFile(
       sessionId,
       file,
-      (progress, total) => {
+      (progress) => {
         setFileProgress(progress)
       },
     )
@@ -126,12 +123,6 @@ export const CallPage = () => {
   const handleRejectFile = async () => {
     await fileTransferManager.current.rejectFile(sessionId, fileTransfer.id)
     setFileTransfer(null)
-  }
-
-  const handleEndCall = async () => {
-    cleanupCall()
-    await sessionsApi.end(sessionId)
-    navigate('/dashboard')
   }
 
   return (

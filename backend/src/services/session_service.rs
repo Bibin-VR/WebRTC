@@ -54,11 +54,7 @@ pub async fn get_session(pool: &PgPool, session_id: Uuid) -> AppResult<Session> 
         .ok_or(AppError::NotFound("Session".to_string()))
 }
 
-pub async fn end_session(
-    pool: &PgPool,
-    session_id: Uuid,
-    user_id: Uuid,
-) -> AppResult<Session> {
+pub async fn end_session(pool: &PgPool, session_id: Uuid, user_id: Uuid) -> AppResult<Session> {
     let session = queries::find_session_by_id(pool, session_id)
         .await?
         .ok_or(AppError::NotFound("Session".to_string()))?;

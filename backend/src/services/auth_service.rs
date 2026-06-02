@@ -55,11 +55,7 @@ pub fn verify_password(password: &str, hash: &str) -> AppResult<bool> {
         .is_ok())
 }
 
-pub fn generate_access_token(
-    user_id: Uuid,
-    email: &str,
-    config: &JwtConfig,
-) -> AppResult<String> {
+pub fn generate_access_token(user_id: Uuid, email: &str, config: &JwtConfig) -> AppResult<String> {
     let now = Utc::now();
     let exp = now + Duration::hours(config.access_token_expiry_hours);
 
@@ -79,11 +75,7 @@ pub fn generate_access_token(
     .map_err(|e| AppError::AuthError(format!("Failed to generate token: {}", e)))
 }
 
-pub fn generate_refresh_token(
-    user_id: Uuid,
-    email: &str,
-    config: &JwtConfig,
-) -> AppResult<String> {
+pub fn generate_refresh_token(user_id: Uuid, email: &str, config: &JwtConfig) -> AppResult<String> {
     let now = Utc::now();
     let exp = now + Duration::days(config.refresh_token_expiry_days);
 

@@ -12,11 +12,15 @@ pub fn extract_user_from_request(
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        .ok_or(AppError::AuthError("Missing Authorization header".to_string()))?;
+        .ok_or(AppError::AuthError(
+            "Missing Authorization header".to_string(),
+        ))?;
 
     let token = auth_header
         .strip_prefix("Bearer ")
-        .ok_or(AppError::AuthError("Invalid Authorization format".to_string()))?;
+        .ok_or(AppError::AuthError(
+            "Invalid Authorization format".to_string(),
+        ))?;
 
     let claims = crate::services::auth_service::validate_token(token, &jwt_config.secret)?;
 

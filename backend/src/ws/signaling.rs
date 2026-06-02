@@ -6,7 +6,10 @@ use uuid::Uuid;
 pub enum WsMessage {
     // Authentication
     #[serde(rename = "auth")]
-    Auth { token: String, device_id: Option<Uuid> },
+    Auth {
+        token: String,
+        device_id: Option<Uuid>,
+    },
 
     #[serde(rename = "auth:success")]
     AuthSuccess { user_id: Uuid, message: String },
@@ -51,32 +54,20 @@ pub enum WsMessage {
     CallAccept { session_id: Uuid },
 
     #[serde(rename = "call:reject")]
-    CallReject {
-        session_id: Uuid,
-        reason: String,
-    },
+    CallReject { session_id: Uuid, reason: String },
 
     #[serde(rename = "call:accepted")]
     CallAccepted { session_id: Uuid },
 
     #[serde(rename = "call:rejected")]
-    CallRejected {
-        session_id: Uuid,
-        reason: String,
-    },
+    CallRejected { session_id: Uuid, reason: String },
 
     // WebRTC signaling
     #[serde(rename = "signal:offer")]
-    SignalOffer {
-        session_id: Uuid,
-        sdp: String,
-    },
+    SignalOffer { session_id: Uuid, sdp: String },
 
     #[serde(rename = "signal:answer")]
-    SignalAnswer {
-        session_id: Uuid,
-        sdp: String,
-    },
+    SignalAnswer { session_id: Uuid, sdp: String },
 
     #[serde(rename = "signal:ice-candidate")]
     SignalIceCandidate {
@@ -102,16 +93,10 @@ pub enum WsMessage {
     },
 
     #[serde(rename = "file:accept")]
-    FileAccept {
-        session_id: Uuid,
-        file_id: Uuid,
-    },
+    FileAccept { session_id: Uuid, file_id: Uuid },
 
     #[serde(rename = "file:reject")]
-    FileReject {
-        session_id: Uuid,
-        file_id: Uuid,
-    },
+    FileReject { session_id: Uuid, file_id: Uuid },
 
     // Error
     #[serde(rename = "error")]

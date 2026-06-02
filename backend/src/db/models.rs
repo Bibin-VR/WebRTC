@@ -32,6 +32,7 @@ impl From<User> for UserPublic {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "device_type", rename_all = "lowercase")]
 pub enum DeviceType {
@@ -50,6 +51,7 @@ impl std::fmt::Display for DeviceType {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "platform_type", rename_all = "lowercase")]
 pub enum PlatformType {
@@ -80,6 +82,7 @@ pub struct Device {
     pub created_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "session_status", rename_all = "lowercase")]
 pub enum SessionStatus {

@@ -16,8 +16,8 @@ mod tests {
         let password = "test_password_123";
         let hash = auth_service::hash_password(password).expect("Failed to hash password");
 
-        let is_valid = auth_service::verify_password(password, &hash)
-            .expect("Failed to verify password");
+        let is_valid =
+            auth_service::verify_password(password, &hash).expect("Failed to verify password");
         assert!(is_valid);
 
         let wrong_password = "wrong_password";
@@ -41,8 +41,8 @@ mod tests {
             .expect("Failed to generate token");
         assert!(!token.is_empty());
 
-        let claims = auth_service::validate_token(&token, &config.secret)
-            .expect("Failed to validate token");
+        let claims =
+            auth_service::validate_token(&token, &config.secret).expect("Failed to validate token");
         assert_eq!(claims.sub, user_id);
         assert_eq!(claims.email, email);
         assert_eq!(claims.token_type, "access");
@@ -63,8 +63,8 @@ mod tests {
             .expect("Failed to generate refresh token");
         assert!(!token.is_empty());
 
-        let claims = auth_service::validate_token(&token, &config.secret)
-            .expect("Failed to validate token");
+        let claims =
+            auth_service::validate_token(&token, &config.secret).expect("Failed to validate token");
         assert_eq!(claims.token_type, "refresh");
     }
 

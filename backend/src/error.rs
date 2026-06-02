@@ -27,15 +27,18 @@ pub enum AppError {
     DatabaseError(#[from] sqlx::Error),
 
     #[error("Internal server error")]
+    #[allow(dead_code)]
     InternalError,
 }
 
 impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
         let (status, error_code, message) = match self {
-            AppError::AuthError(msg) => {
-                (actix_web::http::StatusCode::UNAUTHORIZED, "AUTH_ERROR", msg.clone())
-            }
+            AppError::AuthError(msg) => (
+                actix_web::http::StatusCode::UNAUTHORIZED,
+                "AUTH_ERROR",
+                msg.clone(),
+            ),
             AppError::InvalidCredentials => (
                 actix_web::http::StatusCode::UNAUTHORIZED,
                 "AUTH_INVALID_CREDENTIALS",
@@ -56,9 +59,11 @@ impl ResponseError for AppError {
                 "NOT_FOUND",
                 format!("{} not found", resource),
             ),
-            AppError::Conflict(msg) => {
-                (actix_web::http::StatusCode::CONFLICT, "CONFLICT", msg.clone())
-            }
+            AppError::Conflict(msg) => (
+                actix_web::http::StatusCode::CONFLICT,
+                "CONFLICT",
+                msg.clone(),
+            ),
             AppError::ValidationError(msg) => (
                 actix_web::http::StatusCode::BAD_REQUEST,
                 "VALIDATION_ERROR",

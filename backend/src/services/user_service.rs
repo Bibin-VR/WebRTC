@@ -5,6 +5,7 @@ use crate::db::models::{Device, UserPublic};
 use crate::db::queries;
 use crate::error::{AppError, AppResult};
 
+#[allow(dead_code)]
 pub async fn get_user_profile(pool: &PgPool, user_id: Uuid) -> AppResult<UserPublic> {
     let user = queries::find_user_by_id(pool, user_id)
         .await?

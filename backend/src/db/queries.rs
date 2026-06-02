@@ -177,11 +177,7 @@ pub async fn delete_device(pool: &PgPool, device_id: Uuid, user_id: Uuid) -> App
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn set_device_online(
-    pool: &PgPool,
-    device_id: Uuid,
-    online: bool,
-) -> AppResult<()> {
+pub async fn set_device_online(pool: &PgPool, device_id: Uuid, online: bool) -> AppResult<()> {
     sqlx::query("UPDATE devices SET is_online = $2, last_seen = NOW() WHERE id = $1")
         .bind(device_id)
         .bind(online)
@@ -303,6 +299,7 @@ pub async fn delete_refresh_token(pool: &PgPool, token_hash: &str) -> AppResult<
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn delete_user_refresh_tokens(pool: &PgPool, user_id: Uuid) -> AppResult<()> {
     sqlx::query("DELETE FROM refresh_tokens WHERE user_id = $1")
         .bind(user_id)

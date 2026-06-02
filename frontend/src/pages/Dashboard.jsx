@@ -10,7 +10,6 @@ export const Dashboard = () => {
   const { user, logout } = useAuthStore()
   const [users, setUsers] = useState([])
   const [devices, setDevices] = useState([])
-  const [onlineUsers, setOnlineUsers] = useState(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [wsConnected, setWsConnected] = useState(false)
@@ -31,16 +30,12 @@ export const Dashboard = () => {
       setWsConnected(true)
 
       // Listen for presence updates
-      wsClient.on('user:online', (msg) => {
-        setOnlineUsers((prev) => new Set([...prev, msg.user_id]))
+      wsClient.on('user:online', () => {
+        // Presence tracking handled by server
       })
 
-      wsClient.on('user:offline', (msg) => {
-        setOnlineUsers((prev) => {
-          const newSet = new Set(prev)
-          newSet.delete(msg.user_id)
-          return newSet
-        })
+      wsClient.on('user:offline', () => {
+        // Presence tracking handled by server
       })
 
       // Start heartbeat

@@ -14,6 +14,7 @@ pub type ConnectedClients = Arc<RwLock<HashMap<Uuid, ClientConnection>>>;
 #[derive(Debug, Clone)]
 pub struct ClientConnection {
     pub user_id: Uuid,
+    #[allow(dead_code)]
     pub device_id: Option<Uuid>,
     pub display_name: String,
     pub tx: tokio::sync::mpsc::UnboundedSender<String>,
@@ -28,6 +29,12 @@ impl WsState {
         Self {
             clients: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+}
+
+impl Default for WsState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

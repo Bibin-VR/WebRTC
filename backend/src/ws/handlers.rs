@@ -8,6 +8,13 @@ use super::{ClientConnection, ConnectedClients};
 use crate::db::queries;
 use crate::services::auth_service;
 
+struct MessageContext {
+    tx: tokio::sync::mpsc::UnboundedSender<String>,
+    clients: ConnectedClients,
+    jwt_secret: String,
+    pool: PgPool,
+}
+
 pub async fn handle_ws_connection(
     mut session: Session,
     mut stream: actix_ws::MessageStream,
@@ -29,6 +36,13 @@ pub async fn handle_ws_connection(
         }
     });
 
+    let ctx = MessageContext {
+        tx,
+        clients: clients.clone(),
+        jwt_secret,
+        pool: pool.clone(),
+    };
+
     while let Some(Ok(msg)) = stream.next().await {
         match msg {
             Message::Text(text) => {
@@ -39,10 +53,7 @@ pub async fn handle_ws_connection(
                         handle_message(
                             &ws_msg,
                             &mut session,
-                            &tx,
-                            &clients,
-                            &jwt_secret,
-                            &pool,
+                            &ctx,
                             &mut authenticated_user_id,
                             &mut connection_id,
                         )
@@ -88,22 +99,19 @@ pub async fn handle_ws_connection(
 async fn handle_message(
     msg: &WsMessage,
     session: &mut Session,
-    tx: &tokio::sync::mpsc::UnboundedSender<String>,
-    clients: &ConnectedClients,
-    jwt_secret: &str,
-    pool: &PgPool,
+    ctx: &MessageContext,
     authenticated_user_id: &mut Option<Uuid>,
     connection_id: &mut Uuid,
 ) {
     match msg {
         WsMessage::Auth { token, device_id } => {
-            match auth_service::validate_token(token, jwt_secret) {
+            match auth_service::validate_token(token, &ctx.jwt_secret) {
                 Ok(claims) => {
                     *authenticated_user_id = Some(claims.sub);
 
                     if let Some(dev_id) = device_id {
                         *connection_id = *dev_id;
-                        let _ = queries::set_device_online(pool, *dev_id, true).await;
+                        let _ = queries::set_device_online(&ctx.pool, *dev_id, true).await;
                     }
 
                     let display_name = claims.email.clone();
@@ -112,10 +120,10 @@ async fn handle_message(
                         user_id: claims.sub,
                         device_id: *device_id,
                         display_name: display_name.clone(),
-                        tx: tx.clone(),
+                        tx: ctx.tx.clone(),
                     };
 
-                    clients.write().await.insert(*connection_id, client);
+                    ctx.clients.write().await.insert(*connection_id, client);
 
                     let success = WsMessage::AuthSuccess {
                         user_id: claims.sub,
@@ -130,7 +138,7 @@ async fn handle_message(
                         display_name,
                         device_id: *device_id,
                     };
-                    broadcast_to_others(clients, *connection_id, &online_msg).await;
+                    broadcast_to_others(&ctx.clients, *connection_id, &online_msg).await;
 
                     tracing::info!("User {} authenticated via WebSocket", claims.sub);
                 }
@@ -159,7 +167,7 @@ async fn handle_message(
         } => {
             if let Some(user_id) = authenticated_user_id {
                 let display_name = {
-                    let clients_lock = clients.read().await;
+                    let clients_lock = ctx.clients.read().await;
                     clients_lock
                         .get(connection_id)
                         .map(|c| c.display_name.clone())
@@ -172,62 +180,93 @@ async fn handle_message(
                     initiator_name: display_name,
                 };
 
-                send_to_user(clients, *target_user_id, &incoming).await;
+                send_to_user(&ctx.clients, *target_user_id, &incoming).await;
             }
         }
 
         WsMessage::CallAccept { session_id } => {
             if authenticated_user_id.is_some() {
-                if let Ok(Some(sess)) = queries::find_session_by_id(pool, *session_id).await {
-                    let _ =
-                        queries::update_session_status(pool, *session_id, "active").await;
+                if let Ok(Some(sess)) = queries::find_session_by_id(&ctx.pool, *session_id).await {
+                    let _ = queries::update_session_status(&ctx.pool, *session_id, "active").await;
 
                     let accepted = WsMessage::CallAccepted {
                         session_id: *session_id,
                     };
-                    send_to_user(clients, sess.initiator_id, &accepted).await;
+                    send_to_user(&ctx.clients, sess.initiator_id, &accepted).await;
                 }
             }
         }
 
         WsMessage::CallReject { session_id, reason } => {
             if authenticated_user_id.is_some() {
-                if let Ok(Some(sess)) = queries::find_session_by_id(pool, *session_id).await {
-                    let _ =
-                        queries::update_session_status(pool, *session_id, "failed").await;
+                if let Ok(Some(sess)) = queries::find_session_by_id(&ctx.pool, *session_id).await {
+                    let _ = queries::update_session_status(&ctx.pool, *session_id, "failed").await;
 
                     let rejected = WsMessage::CallRejected {
                         session_id: *session_id,
                         reason: reason.clone(),
                     };
-                    send_to_user(clients, sess.initiator_id, &rejected).await;
+                    send_to_user(&ctx.clients, sess.initiator_id, &rejected).await;
                 }
             }
         }
 
         WsMessage::SignalOffer { session_id, .. } => {
-            forward_to_peer(clients, pool, *session_id, authenticated_user_id, msg).await;
+            forward_to_peer(
+                &ctx.clients,
+                &ctx.pool,
+                *session_id,
+                authenticated_user_id,
+                msg,
+            )
+            .await;
         }
 
         WsMessage::SignalAnswer { session_id, .. } => {
-            forward_to_peer(clients, pool, *session_id, authenticated_user_id, msg).await;
+            forward_to_peer(
+                &ctx.clients,
+                &ctx.pool,
+                *session_id,
+                authenticated_user_id,
+                msg,
+            )
+            .await;
         }
 
-        WsMessage::SignalIceCandidate {
-            session_id, ..
-        } => {
-            forward_to_peer(clients, pool, *session_id, authenticated_user_id, msg).await;
+        WsMessage::SignalIceCandidate { session_id, .. } => {
+            forward_to_peer(
+                &ctx.clients,
+                &ctx.pool,
+                *session_id,
+                authenticated_user_id,
+                msg,
+            )
+            .await;
         }
 
         WsMessage::StreamStartScreen { session_id }
         | WsMessage::StreamStopScreen { session_id } => {
-            forward_to_peer(clients, pool, *session_id, authenticated_user_id, msg).await;
+            forward_to_peer(
+                &ctx.clients,
+                &ctx.pool,
+                *session_id,
+                authenticated_user_id,
+                msg,
+            )
+            .await;
         }
 
         WsMessage::FileOffer { session_id, .. }
         | WsMessage::FileAccept { session_id, .. }
         | WsMessage::FileReject { session_id, .. } => {
-            forward_to_peer(clients, pool, *session_id, authenticated_user_id, msg).await;
+            forward_to_peer(
+                &ctx.clients,
+                &ctx.pool,
+                *session_id,
+                authenticated_user_id,
+                msg,
+            )
+            .await;
         }
 
         // Log unhandled messages for debugging

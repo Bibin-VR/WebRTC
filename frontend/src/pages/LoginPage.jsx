@@ -56,7 +56,7 @@ export const LoginPage = ({ onSwitchToRegister }) => {
         </form>
 
         <p className="switch-auth">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <button
             type="button"
             onClick={onSwitchToRegister}
