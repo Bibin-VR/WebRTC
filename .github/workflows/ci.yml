@@ -25,7 +25,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          working-directory: backend
+          workspaces: backend
 
       - name: Run tests
         working-directory: backend
@@ -52,7 +52,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          working-directory: backend
+          workspaces: backend
 
       - name: Build
         working-directory: backend
