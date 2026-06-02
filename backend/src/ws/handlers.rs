@@ -230,7 +230,10 @@ async fn handle_message(
             forward_to_peer(clients, pool, *session_id, authenticated_user_id, msg).await;
         }
 
-        _ => {}
+        // Log unhandled messages for debugging
+        _ => {
+            tracing::debug!("Unhandled WebSocket message type");
+        }
     }
 }
 
