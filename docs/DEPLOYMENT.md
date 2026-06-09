@@ -1,532 +1,461 @@
-# Deployment Guide
+# WebRTC Platform - Production Deployment Guide
 
-## Overview
-This guide covers deploying the WebRTC platform to production environments. Supported deployment methods:
-1. Docker containers on VPS
-2. Kubernetes cluster
-3. Cloud providers (AWS, Google Cloud, DigitalOcean)
+## Table of Contents
+1. [Prerequisites](#prerequisites)
+2. [Pre-Deployment Checklist](#pre-deployment-checklist)
+3. [Local Deployment](#local-deployment)
+4. [VPS/Cloud Deployment](#vpscloud-deployment)
+5. [Docker Deployment](#docker-deployment)
+6. [Kubernetes Deployment](#kubernetes-deployment)
+7. [SSL/TLS Setup](#ssltls-setup)
+8. [Backup & Recovery](#backup--recovery)
+9. [Monitoring](#monitoring)
+10. [Troubleshooting](#troubleshooting)
+
+## Prerequisites
+
+### System Requirements
+- Docker & Docker Compose 1.29+
+- Nginx 1.20+
+- PostgreSQL 13+ (or Docker container)
+- Redis 6.0+ (or Docker container)
+- 2+ GB RAM minimum (4GB+ recommended)
+- 20GB+ disk space for databases and backups
+
+### Security Requirements
+- Valid SSL/TLS certificate (Let's Encrypt recommended)
+- UFW/firewall configured
+- Fail2Ban for brute-force protection
+- SSH key authentication (no password login)
 
 ## Pre-Deployment Checklist
 
-- [ ] All tests passing
-- [ ] Code reviewed and merged to main
-- [ ] Environment variables configured
-- [ ] Database migrations tested
-- [ ] SSL/TLS certificates obtained
-- [ ] Domain configured
-- [ ] Backup strategy in place
-- [ ] Monitoring/logging configured
+- [ ] SSL/TLS certificate obtained and validated
+- [ ] Domain DNS configured to point to server IP
+- [ ] Database backups tested and verified
+- [ ] Environment variables configured in `.env.production`
+- [ ] Firewall rules configured (22, 80, 443)
+- [ ] Docker images built and tested locally
+- [ ] Health checks verified in staging
+- [ ] Monitoring and alerting configured
+- [ ] Team notified of deployment schedule
 
-## Production Environment Setup
+## Local Deployment
 
-### Environment Variables
+### Development Environment
+```bash
+# Start development stack
+docker-compose up -d
 
-Create `.env.production`:
+# View logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# Access services
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8080
+# WebSocket: ws://localhost:8080/ws
 ```
-# Database
-DATABASE_URL=postgresql://user:password@db-host:5432/webrtc_prod
-DATABASE_POOL_SIZE=20
 
-# Security
-JWT_SECRET=<generate-strong-secret-32-chars-minimum>
-JWT_EXPIRY_HOURS=1
-REFRESH_TOKEN_EXPIRY_DAYS=7
+### Test Environment
+```bash
+# Create test environment
+cp .env.production.example .env.test
+nano .env.test  # Configure for test database
 
-# Server
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-ENVIRONMENT=production
-LOG_LEVEL=info
+# Start test stack
+docker-compose -f docker-compose.prod.yml --env-file .env.test up -d
 
-# CORS & Security
-CORS_ORIGIN=https://webrtc-platform.com
-ALLOWED_ORIGINS=webrtc-platform.com,www.webrtc-platform.com
-SECURE_COOKIES=true
-HSTS_MAX_AGE=31536000
+# Run integration tests
+npm run test:integration
+cargo test --release
+```
 
-# Optional Services
-REDIS_URL=redis://redis-host:6379
-SENTRY_DSN=https://your-sentry-dsn
+## VPS/Cloud Deployment
+
+### 1. Server Setup (Ubuntu 22.04)
+
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Install Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Install Nginx
+sudo apt install nginx -y
+
+# Install Certbot for SSL
+sudo apt install certbot python3-certbot-nginx -y
+
+# Create deployment user
+sudo adduser deploy
+sudo usermod -aG docker deploy
+sudo visudo  # Add: deploy ALL=(ALL) NOPASSWD: /usr/bin/docker-compose
+```
+
+### 2. Configure Domain & SSL
+
+```bash
+# Point domain DNS to server IP (A record)
+# Wait 24-48 hours for DNS propagation
+
+# Verify DNS resolution
+nslookup yourdomain.com
+
+# Generate SSL certificate
+sudo certbot certonly --standalone -d yourdomain.com -d www.yourdomain.com
+
+# Generate Diffie-Hellman parameter
+sudo openssl dhparam -out /etc/ssl/certs/dhparam.pem 2048
+
+# Copy SSL files to project
+sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem ./ssl/cert.pem
+sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem ./ssl/key.pem
+sudo cp /etc/ssl/certs/dhparam.pem ./dhparam.pem
+sudo chown deploy:deploy ./ssl/* ./dhparam.pem
+```
+
+### 3. Deploy Application
+
+```bash
+# Clone repository
+git clone https://github.com/your-org/webrtc-platform.git
+cd webrtc-platform
+
+# Setup environment
+cp .env.production.example .env.production
+nano .env.production  # Edit with production values
+
+# Make scripts executable
+chmod +x scripts/*.sh
+
+# Run deployment
+./scripts/deploy.sh
+
+# Verify deployment
+curl https://yourdomain.com/health
+```
+
+### 4. Setup Auto-SSL Renewal
+
+```bash
+# Create renewal script
+sudo tee /etc/letsencrypt/renewal-hooks/post/webrtc.sh > /dev/null <<'EOF'
+#!/bin/bash
+cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem /path/to/webrtc/ssl/cert.pem
+cp /etc/letsencrypt/live/yourdomain.com/privkey.pem /path/to/webrtc/ssl/key.pem
+docker-compose -f /path/to/webrtc/docker-compose.prod.yml restart nginx
+EOF
+
+sudo chmod +x /etc/letsencrypt/renewal-hooks/post/webrtc.sh
+
+# Test renewal
+sudo certbot renew --dry-run
+
+# Enable auto-renewal cron job (runs twice daily)
+sudo systemctl enable certbot.timer
+sudo systemctl start certbot.timer
 ```
 
 ## Docker Deployment
 
 ### Build Images
 
-#### Backend
 ```bash
+# Build backend image
 cd backend
+docker build -t webrtc-backend:v1.0.0 .
+docker tag webrtc-backend:v1.0.0 ghcr.io/your-org/webrtc-backend:latest
 
-# Build Rust binary
-cargo build --release
+# Build frontend image
+cd ../frontend
+docker build -t webrtc-frontend:v1.0.0 .
+docker tag webrtc-frontend:v1.0.0 ghcr.io/your-org/webrtc-frontend:latest
 
-# Create Dockerfile
-cat > Dockerfile << 'EOF'
-FROM rust:1.70 as builder
-WORKDIR /app
-COPY . .
-RUN cargo build --release
-
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/webrtc_backend /usr/local/bin/
-EXPOSE 8080
-CMD ["webrtc_backend"]
-EOF
-
-# Build image
-docker build -t webrtc-backend:latest .
-docker tag webrtc-backend:latest webrtc-backend:v1.0.0
+# Push to registry
+docker push ghcr.io/your-org/webrtc-backend:latest
+docker push ghcr.io/your-org/webrtc-frontend:latest
 ```
 
-#### Frontend
-```bash
-cd frontend
-
-# Create Dockerfile
-cat > Dockerfile << 'EOF'
-FROM node:18-alpine as builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-
-FROM node:18-alpine
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-RUN npm install -g serve
-EXPOSE 3000
-CMD ["serve", "-s", "dist", "-l", "3000"]
-EOF
-
-# Build image
-docker build -t webrtc-frontend:latest .
-docker tag webrtc-frontend:latest webrtc-frontend:v1.0.0
-```
-
-### Docker Compose Production
-
-Create `docker-compose.prod.yml`:
-```yaml
-version: '3.8'
-
-services:
-  db:
-    image: postgres:15-alpine
-    container_name: webrtc_db_prod
-    restart: always
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: webrtc_prod
-    volumes:
-      - postgres_prod_data:/var/lib/postgresql/data
-    networks:
-      - webrtc_prod_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  backend:
-    image: webrtc-backend:latest
-    container_name: webrtc_api_prod
-    restart: always
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/webrtc_prod
-      JWT_SECRET: ${JWT_SECRET}
-      ENVIRONMENT: production
-    ports:
-      - "8080:8080"
-    networks:
-      - webrtc_prod_network
-
-  frontend:
-    image: webrtc-frontend:latest
-    container_name: webrtc_web_prod
-    restart: always
-    ports:
-      - "3000:3000"
-    networks:
-      - webrtc_prod_network
-
-  nginx:
-    image: nginx:alpine
-    container_name: webrtc_nginx_prod
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - webrtc_prod_network
-
-volumes:
-  postgres_prod_data:
-    driver: local
-
-networks:
-  webrtc_prod_network:
-    driver: bridge
-```
-
-### Nginx Configuration
-
-Create `nginx.conf`:
-```nginx
-events {
-    worker_connections 1024;
-}
-
-http {
-    upstream backend {
-        server backend:8080;
-    }
-
-    upstream frontend {
-        server frontend:3000;
-    }
-
-    server {
-        listen 80;
-        server_name webrtc-platform.com www.webrtc-platform.com;
-        return 301 https://$server_name$request_uri;
-    }
-
-    server {
-        listen 443 ssl http2;
-        server_name webrtc-platform.com www.webrtc-platform.com;
-
-        ssl_certificate /etc/nginx/ssl/cert.pem;
-        ssl_certificate_key /etc/nginx/ssl/key.pem;
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
-
-        # Security headers
-        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-XSS-Protection "1; mode=block" always;
-
-        # API proxy
-        location /api/ {
-            proxy_pass http://backend/;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_buffering off;
-        }
-
-        # WebSocket
-        location /ws {
-            proxy_pass http://backend;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_read_timeout 86400;
-        }
-
-        # Frontend
-        location / {
-            proxy_pass http://frontend;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        }
-    }
-}
-```
-
-### Deploy Steps
+### Deploy Stack
 
 ```bash
-# 1. SSH into server
-ssh user@server.com
-
-# 2. Clone repository
-git clone https://github.com/your-org/webrtc-platform.git
-cd webrtc-platform
-
-# 3. Set production environment
-cp .env.production.example .env.production
-# Edit .env.production with actual values
-
-# 4. Generate SSL certificates (Let's Encrypt)
-sudo certbot certonly --standalone -d webrtc-platform.com -d www.webrtc-platform.com
-
-# 5. Copy certificates
-sudo cp /etc/letsencrypt/live/webrtc-platform.com/fullchain.pem ./ssl/cert.pem
-sudo cp /etc/letsencrypt/live/webrtc-platform.com/privkey.pem ./ssl/key.pem
-sudo chown $USER:$USER ./ssl/*
-
-# 6. Start services
+# Start production stack
 docker-compose -f docker-compose.prod.yml up -d
 
-# 7. Run migrations
-docker-compose -f docker-compose.prod.yml exec backend cargo sqlx migrate run
-
-# 8. Verify deployment
+# Verify services
 docker-compose -f docker-compose.prod.yml ps
-curl https://webrtc-platform.com/health
+docker-compose -f docker-compose.prod.yml logs
+
+# Scale backend for load
+docker-compose -f docker-compose.prod.yml up -d --scale backend=3
 ```
 
 ## Kubernetes Deployment
 
-### Create Kubernetes Manifests
-
-```yaml
-# k8s/namespace.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: webrtc-platform
-
----
-# k8s/configmap.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: webrtc-config
-  namespace: webrtc-platform
-data:
-  LOG_LEVEL: info
-  ENVIRONMENT: production
-
----
-# k8s/secret.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: webrtc-secrets
-  namespace: webrtc-platform
-type: Opaque
-stringData:
-  DATABASE_URL: postgresql://user:password@postgres:5432/webrtc
-  JWT_SECRET: your-super-secret-key
-
----
-# k8s/backend-deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: webrtc-backend
-  namespace: webrtc-platform
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: webrtc-backend
-  template:
-    metadata:
-      labels:
-        app: webrtc-backend
-    spec:
-      containers:
-      - name: backend
-        image: webrtc-backend:latest
-        ports:
-        - containerPort: 8080
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: webrtc-secrets
-              key: DATABASE_URL
-        - name: JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: webrtc-secrets
-              key: JWT_SECRET
-        envFrom:
-        - configMapRef:
-            name: webrtc-config
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-
----
-# k8s/backend-service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: webrtc-backend
-  namespace: webrtc-platform
-spec:
-  selector:
-    app: webrtc-backend
-  ports:
-  - port: 80
-    targetPort: 8080
-  type: ClusterIP
-
----
-# k8s/ingress.yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: webrtc-ingress
-  namespace: webrtc-platform
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-spec:
-  ingressClassName: nginx
-  tls:
-  - hosts:
-    - webrtc-platform.com
-    secretName: webrtc-tls
-  rules:
-  - host: webrtc-platform.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: webrtc-backend
-            port:
-              number: 80
-```
-
-### Deploy to Kubernetes
+### Create Namespace & Secrets
 
 ```bash
-# 1. Create namespace
+# Create namespace
+kubectl create namespace webrtc-platform
+
+# Create secrets
+kubectl -n webrtc-platform create secret generic webrtc-secrets \
+  --from-literal=db-password=your-secure-password \
+  --from-literal=jwt-secret=your-jwt-secret \
+  --from-literal=redis-password=your-redis-password
+
+# Create ConfigMap
+kubectl -n webrtc-platform create configmap webrtc-config \
+  --from-literal=environment=production \
+  --from-literal=log-level=info
+```
+
+### Deploy Services
+
+```bash
+# Apply manifests
 kubectl apply -f k8s/namespace.yaml
-
-# 2. Create secrets
-kubectl apply -f k8s/secret.yaml
-kubectl apply -f k8s/configmap.yaml
-
-# 3. Deploy backend
+kubectl apply -f k8s/postgres-statefulset.yaml
+kubectl apply -f k8s/redis-statefulset.yaml
 kubectl apply -f k8s/backend-deployment.yaml
 kubectl apply -f k8s/backend-service.yaml
-
-# 4. Deploy ingress
+kubectl apply -f k8s/frontend-deployment.yaml
+kubectl apply -f k8s/frontend-service.yaml
 kubectl apply -f k8s/ingress.yaml
 
-# 5. Verify
-kubectl get pods -n webrtc-platform
-kubectl get ingress -n webrtc-platform
+# Wait for all pods
+kubectl -n webrtc-platform wait --for=condition=ready pod --all --timeout=300s
+
+# Verify deployment
+kubectl -n webrtc-platform get all
 ```
 
-## Database Backups
+## SSL/TLS Setup
 
-### Automated Backup Script
+### Let's Encrypt with Certbot
 
 ```bash
-#!/bin/bash
-# backup.sh
+# Install SSL certificate
+sudo certbot certonly --standalone \
+  -d yourdomain.com \
+  -d www.yourdomain.com \
+  --email your-email@example.com \
+  --agree-tos \
+  --no-eff-email
 
-BACKUP_DIR="/backups/webrtc"
-DB_HOST="db"
-DB_USER="postgres"
-DB_NAME="webrtc_prod"
-BACKUP_DATE=$(date +%Y%m%d_%H%M%S)
-
-mkdir -p $BACKUP_DIR
-
-# Create backup
-docker-compose exec -T db pg_dump -U $DB_USER $DB_NAME | gzip > $BACKUP_DIR/backup_$BACKUP_DATE.sql.gz
-
-# Keep only last 30 days of backups
-find $BACKUP_DIR -name "backup_*.sql.gz" -mtime +30 -delete
-
-echo "Backup completed: $BACKUP_DIR/backup_$BACKUP_DATE.sql.gz"
+# Copy to deployment directory
+sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem ./ssl/cert.pem
+sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem ./ssl/key.pem
+sudo chown deploy:deploy ./ssl/*
 ```
 
-Schedule with cron:
+### Self-Signed Certificate (Testing Only)
+
 ```bash
-# Daily backup at 2 AM
-0 2 * * * /path/to/backup.sh
+# Generate self-signed certificate
+openssl req -x509 -newkey rsa:4096 \
+  -keyout ./ssl/key.pem \
+  -out ./ssl/cert.pem \
+  -days 365 -nodes
 ```
 
-## Monitoring & Logging
+## Backup & Recovery
 
-### Set Up Monitoring
-- Use Prometheus for metrics
-- Use Grafana for dashboards
-- Use ELK stack for logging
-- Monitor WebRTC connection stats
-- Alert on error rates and latency
+### Automated Backups
+
+```bash
+# Run backup script manually
+./scripts/backup.sh
+
+# Setup automated daily backups (cron)
+(crontab -l 2>/dev/null; echo "0 2 * * * cd /path/to/webrtc && ./scripts/backup.sh") | crontab -
+
+# Verify backup
+ls -lh ./backups/
+```
+
+### Recovery from Backup
+
+```bash
+# List available backups
+ls -lh ./backups/postgres_*.sql.gz
+
+# Restore from backup
+./scripts/rollback.sh ./backups/postgres_YYYYMMDD_HHMMSS.sql.gz
+
+# Verify restoration
+docker-compose -f docker-compose.prod.yml exec postgres psql -U webrtc -c "SELECT * FROM users LIMIT 1;"
+```
+
+### Backup Storage
+
+```bash
+# Archive backups to S3
+aws s3 sync ./backups/ s3://your-bucket/webrtc-backups/
+
+# Download backup from S3
+aws s3 cp s3://your-bucket/webrtc-backups/postgres_YYYYMMDD_HHMMSS.sql.gz ./backups/
+```
+
+## Monitoring
 
 ### Health Checks
-```
-GET /health → 200 OK
-GET /ready  → 200 OK when ready for traffic
-```
-
-## Scaling Considerations
-
-1. **Horizontal Scaling**: Run multiple backend instances behind load balancer
-2. **Database**: Use connection pooling (pgBouncer), read replicas
-3. **WebSocket**: Implement session affinity or Redis pub/sub for multi-node
-4. **File Storage**: Use S3 or object storage for file transfers
-5. **CDN**: Cache static assets on CDN
-
-## Security Hardening
-
-1. Enable WAF (Web Application Firewall)
-2. Implement rate limiting at load balancer level
-3. Use VPN for database connections
-4. Enable encryption at rest for databases
-5. Regular security audits and penetration testing
-6. Keep dependencies updated
-7. Monitor for vulnerabilities with tools like Snyk
-
-## Rollback Procedure
 
 ```bash
-# Get previous image version
-docker images | grep webrtc-backend
+# API health check
+curl https://yourdomain.com/health
 
-# Roll back to previous version
-docker tag webrtc-backend:v1.0.0 webrtc-backend:latest
-docker-compose -f docker-compose.prod.yml up -d backend
+# WebSocket connectivity
+wscat -c wss://yourdomain.com/ws
 
-# Verify rollback
-docker-compose -f docker-compose.prod.yml logs backend
+# Database connection
+docker-compose -f docker-compose.prod.yml exec postgres pg_isready -U webrtc
+
+# Redis connection
+docker-compose -f docker-compose.prod.yml exec redis redis-cli ping
 ```
 
-## Monitoring Checklist
+### Logging
 
-- [ ] Server uptime monitoring
-- [ ] Database performance monitoring
-- [ ] Application error rate monitoring
-- [ ] WebRTC connection success rate
-- [ ] API response time monitoring
-- [ ] Disk space monitoring
-- [ ] Network bandwidth monitoring
-- [ ] Security event logging
+```bash
+# View backend logs
+docker-compose -f docker-compose.prod.yml logs -f backend --tail 100
+
+# View Nginx logs
+docker-compose -f docker-compose.prod.yml logs -f nginx --tail 100
+
+# Export logs for analysis
+docker-compose -f docker-compose.prod.yml logs backend > backend.log 2>&1
+```
+
+### Metrics & Monitoring
+
+#### Prometheus Integration
+```bash
+# Add to docker-compose.prod.yml
+prometheus:
+  image: prom/prometheus:latest
+  volumes:
+    - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    - ./metrics:/prometheus
+  ports:
+    - "9090:9090"
+```
+
+#### Resource Monitoring
+```bash
+# Monitor Docker containers
+docker stats
+
+# Monitor system resources
+top
+htop
+
+# Check disk usage
+df -h
+du -sh ./backups/
+```
+
+## Troubleshooting
+
+### Services Not Starting
+
+```bash
+# Check service logs
+docker-compose -f docker-compose.prod.yml logs backend
+docker-compose -f docker-compose.prod.yml logs postgres
+
+# Restart services
+docker-compose -f docker-compose.prod.yml restart backend
+
+# Rebuild images if needed
+docker-compose -f docker-compose.prod.yml build --no-cache
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### Database Connection Issues
+
+```bash
+# Check database is running
+docker-compose -f docker-compose.prod.yml ps postgres
+
+# Test connection
+docker-compose -f docker-compose.prod.yml exec postgres psql -U webrtc -c "SELECT version();"
+
+# Check database size
+docker-compose -f docker-compose.prod.yml exec postgres psql -U webrtc -c "SELECT pg_database.datname, pg_size_pretty(pg_database_size(pg_database.datname)) FROM pg_database ORDER BY pg_database_size(pg_database.datname) DESC;"
+```
+
+### WebSocket Connection Issues
+
+```bash
+# Check WebSocket connectivity
+curl -i -N -H "Connection: Upgrade" -H "Upgrade: websocket" \
+  https://yourdomain.com/ws
+
+# Monitor WebSocket connections
+docker-compose -f docker-compose.prod.yml logs backend | grep -i websocket
+```
+
+### SSL/TLS Issues
+
+```bash
+# Verify certificate
+openssl s_client -connect yourdomain.com:443
+
+# Check certificate expiration
+echo | openssl s_client -connect yourdomain.com:443 -servername yourdomain.com 2>/dev/null | openssl x509 -noout -dates
+
+# Test SSL configuration
+nmap --script ssl-enum-ciphers -p 443 yourdomain.com
+```
+
+### Performance Issues
+
+```bash
+# Check CPU usage
+docker stats --no-stream
+
+# Check memory usage
+free -h
+
+# Check disk I/O
+iostat -x 1
+
+# Optimize queries with EXPLAIN
+docker-compose -f docker-compose.prod.yml exec postgres psql -U webrtc -c "EXPLAIN ANALYZE SELECT * FROM users WHERE id = '...';"
+```
+
+## Production Checklist
+
+- [ ] SSL/TLS certificates installed and valid
+- [ ] Automated backups running and verified
+- [ ] Health checks passing for all services
+- [ ] Monitoring and alerting configured
+- [ ] Rate limiting enabled
+- [ ] CORS properly configured
+- [ ] Database indexed for common queries
+- [ ] Connection pooling configured
+- [ ] Log rotation enabled
+- [ ] Fail2Ban protecting SSH and APIs
+- [ ] Firewall rules reviewed and tested
+- [ ] Team trained on deployment procedures
+- [ ] Incident response plan documented
+- [ ] Regular backup restoration tests scheduled
+
+## Support
+
+For issues and questions:
+1. Check logs: `docker-compose logs -f`
+2. Review [TROUBLESHOOTING](#troubleshooting) section
+3. Consult [ARCHITECTURE.md](ARCHITECTURE.md)
+4. Open GitHub issue with logs and error messages

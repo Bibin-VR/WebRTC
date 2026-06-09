@@ -1,8 +1,8 @@
 # Rust
 target/
-Cargo.lock
 *.rs.bk
 .cargo/
+.sqlx/
 
 # Node/npm
 node_modules/
