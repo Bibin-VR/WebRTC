@@ -1,7 +1,38 @@
 .call-page {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #1a1a1a;
+  background-color: #1a1a2e;
+  overflow: hidden;
+}
+
+.call-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #13131f;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.session-info {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.btn-end-call {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 16px;
+  background: #dc3545;
+  color: white;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.btn-end-call:hover {
+  background: #c82333;
 }
