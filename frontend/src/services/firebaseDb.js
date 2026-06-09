@@ -1,7 +1,7 @@
 import { database } from './firebase'
 import {
   ref, set, get, update, remove, push,
-  onValue, onChildAdded, serverTimestamp,
+  onValue, onChildAdded, onDisconnect, serverTimestamp,
 } from 'firebase/database'
 
 // ── Device identity ──
@@ -22,12 +22,14 @@ export function getOrCreateDeviceId() {
 export async function registerDevice(hostname, platform) {
   const deviceId = getOrCreateDeviceId()
 
-  const snap = await get(ref(database, `devices/${deviceId}`))
+  const devRef = ref(database, `devices/${deviceId}`)
+  const snap = await get(devRef)
   if (snap.exists() && snap.val().slot) {
     const { slot } = snap.val()
-    await update(ref(database, `devices/${deviceId}`), {
+    await update(devRef, {
       hostname, platform, available: true, lastSeen: serverTimestamp(),
     })
+    onDisconnect(devRef).update({ available: false, lastSeen: serverTimestamp() })
     return { deviceId, slot }
   }
 
@@ -38,9 +40,10 @@ export async function registerDevice(hostname, platform) {
   let slot = 1
   while (used.has(slot)) slot++
 
-  await set(ref(database, `devices/${deviceId}`), {
+  await set(devRef, {
     slot, hostname, platform, available: true, lastSeen: serverTimestamp(),
   })
+  onDisconnect(devRef).update({ available: false, lastSeen: serverTimestamp() })
   return { deviceId, slot }
 }
 

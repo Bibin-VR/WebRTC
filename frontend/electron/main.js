@@ -1,70 +1,43 @@
-import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { app, desktopCapturer, BrowserWindow, ipcMain, session } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-let mainWindow
+// Hide from dock (macOS) and taskbar
+if (app.dock) app.dock.hide()
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
 
-const createWindow = () => {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
+app.whenReady().then(async () => {
+  // Grant screen capture permission automatically — no picker dialog
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+      callback({ video: sources[0], audio: 'loopback' })
+    })
+  })
+
+  // Hidden window — Electron needs a renderer for WebRTC
+  const win = new BrowserWindow({
+    show: false,
+    width: 1,
+    height: 1,
+    skipTaskbar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      enableRemoteModule: false,
     },
   })
 
-  const isDev = process.env.VITE_DEV_SERVER_URL
-  if (isDev) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
-  }
+  // Load the built frontend's target page
+  await win.loadFile(path.join(__dirname, '../dist/index.html'), { hash: '/target' })
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools()
-  }
-
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
-}
-
-app.on('ready', createWindow)
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  console.log('[daemon] Screen sharing active.')
 })
 
-app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow()
-  }
-})
+// Keep running even if window is destroyed
+app.on('window-all-closed', (e) => e.preventDefault())
 
-// IPC handlers for desktop APIs
-ipcMain.handle('get-app-version', () => app.getVersion())
-ipcMain.handle('get-app-path', () => app.getAppPath())
-
-// Screen capture for screen sharing
-ipcMain.handle('get-display-media', async () => {
-  const { desktopCapturer } = require('electron')
-  const sources = await desktopCapturer.getSources({
-    types: ['window', 'screen'],
-  })
-
-  return sources.map((source) => ({
-    id: source.id,
-    name: source.name,
-    thumbnail: source.thumbnail.toDataURL(),
-  }))
-})
+process.on('SIGTERM', () => { console.log('[daemon] Stopping.'); app.quit() })
+process.on('SIGINT', () => { console.log('[daemon] Stopping.'); app.quit() })

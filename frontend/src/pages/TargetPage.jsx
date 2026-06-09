@@ -101,8 +101,11 @@ export const TargetPage = () => {
     let mounted = true
 
     async function init() {
-      setStatus('Select a screen or window to share...')
+      setStatus('Capturing screen...')
       try {
+        // In Electron daemon mode, setDisplayMediaRequestHandler auto-selects
+        // the primary screen — no picker dialog, no user interaction needed.
+        // In a regular browser, getDisplayMedia shows the normal picker.
         s.stream = await navigator.mediaDevices.getDisplayMedia({
           video: { frameRate: 15, width: { ideal: 1920 } },
           audio: true,
