@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../hooks/useAuth'
-import { sessionsApi } from '../services/api'
+import { endSession } from '../services/firebaseDb'
 import { FirebaseSignalingService } from '../services/firebaseSignaling'
 import { FileTransferDialog } from '../components/FileTransferDialog'
 import { MultiCallView } from '../components/MultiCallView'
@@ -135,7 +135,7 @@ export const CallPage = () => {
   const handleEndCall = async () => {
     await signalingRef.current?.leave()
     try {
-      await sessionsApi.end(sessionId)
+      await endSession(sessionId)
     } catch {
       // ignore — session may already be ended
     }

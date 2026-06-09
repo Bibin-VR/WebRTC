@@ -1,99 +1,68 @@
 import { create } from 'zustand'
-import { authApi } from '../services/api'
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updateProfile,
+} from 'firebase/auth'
+import { auth } from '../services/firebase'
+import { createUserProfile, getUserProfile, goOnline, goOffline } from '../services/firebaseDb'
 
-export const useAuthStore = create((set) => ({
+export const useAuthStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
   loading: true,
-  accessToken: null,
-  refreshToken: null,
 
-  initAuth: async () => {
-    const savedUser = localStorage.getItem('user')
-    const savedAccessToken = localStorage.getItem('access_token')
-    const savedRefreshToken = localStorage.getItem('refresh_token')
-
-    if (savedUser && savedAccessToken) {
-      set({
-        user: JSON.parse(savedUser),
-        isAuthenticated: true,
-        accessToken: savedAccessToken,
-        refreshToken: savedRefreshToken,
-        loading: false,
-      })
-    } else {
-      set({ loading: false })
-    }
+  initAuth: () => {
+    onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        let profile = await getUserProfile(firebaseUser.uid)
+        if (!profile) {
+          profile = {
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName || firebaseUser.email,
+          }
+        }
+        await goOnline(firebaseUser.uid, profile.displayName)
+        set({ user: profile, isAuthenticated: true, loading: false })
+      } else {
+        set({ user: null, isAuthenticated: false, loading: false })
+      }
+    })
   },
 
   register: async (email, password, displayName) => {
-    const response = await authApi.register(email, password, displayName)
-    const { user_id, email: userEmail, display_name, access_token, refresh_token } = response.data
-
-    const user = {
-      id: user_id,
-      email: userEmail,
-      displayName: display_name,
-    }
-
-    localStorage.setItem('user', JSON.stringify(user))
-    localStorage.setItem('access_token', access_token)
-    localStorage.setItem('refresh_token', refresh_token)
-
-    set({
-      user,
-      isAuthenticated: true,
-      accessToken: access_token,
-      refreshToken: refresh_token,
-    })
-
-    return user
+    const cred = await createUserWithEmailAndPassword(auth, email, password)
+    await updateProfile(cred.user, { displayName })
+    await createUserProfile(cred.user.uid, email, displayName)
+    const profile = { id: cred.user.uid, email, displayName }
+    await goOnline(cred.user.uid, displayName)
+    set({ user: profile, isAuthenticated: true })
+    return profile
   },
 
   login: async (email, password) => {
-    const response = await authApi.login(email, password)
-    const { user_id, email: userEmail, display_name, access_token, refresh_token } = response.data
-
-    const user = {
-      id: user_id,
-      email: userEmail,
-      displayName: display_name,
+    const cred = await signInWithEmailAndPassword(auth, email, password)
+    let profile = await getUserProfile(cred.user.uid)
+    if (!profile) {
+      profile = {
+        id: cred.user.uid,
+        email: cred.user.email,
+        displayName: cred.user.displayName || cred.user.email,
+      }
     }
-
-    localStorage.setItem('user', JSON.stringify(user))
-    localStorage.setItem('access_token', access_token)
-    localStorage.setItem('refresh_token', refresh_token)
-
-    set({
-      user,
-      isAuthenticated: true,
-      accessToken: access_token,
-      refreshToken: refresh_token,
-    })
-
-    return user
+    await goOnline(cred.user.uid, profile.displayName)
+    set({ user: profile, isAuthenticated: true })
+    return profile
   },
 
   logout: async () => {
-    const refreshToken = localStorage.getItem('refresh_token')
-    if (refreshToken) {
-      try {
-        await authApi.logout(refreshToken)
-      } catch (error) {
-        console.error('Logout error:', error)
-      }
-    }
-
-    localStorage.removeItem('user')
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-
-    set({
-      user: null,
-      isAuthenticated: false,
-      accessToken: null,
-      refreshToken: null,
-    })
+    const { user } = get()
+    if (user?.id) await goOffline(user.id)
+    await signOut(auth)
+    set({ user: null, isAuthenticated: false })
   },
 
   updateUser: (user) => set({ user }),
