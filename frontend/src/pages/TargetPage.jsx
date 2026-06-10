@@ -3,7 +3,7 @@ import { authReady } from '../services/firebase'
 import {
   getOrCreateDeviceId, registerDevice, setDeviceOffline,
   watchNewMonitors, watchOffer, publishAnswer,
-  addIceCandidate, watchIceCandidates, cleanupSignaling,
+  addIceCandidate, watchIceCandidates, cleanupSignaling, cleanupAllSignaling,
 } from '../services/firebaseDb'
 import './TargetPage.css'
 
@@ -65,10 +65,13 @@ async function handleMonitor(state, monitorId, onConnected, onDisconnected) {
   })
   state.unsubs.push(unsubIce)
 
-  // Wait for the offer, then answer it
-  const unsubOffer = watchOffer(state.deviceId, monitorId, async (offer) => {
+  // Wait for the offer, then answer it.
+  // `let` + optional chain: Firebase fires the callback synchronously when stale data
+  // exists in the DB, before watchOffer() returns — `const` would TDZ in that case.
+  let unsubOffer
+  unsubOffer = watchOffer(state.deviceId, monitorId, async (offer) => {
     if (pc.remoteDescription) return
-    unsubOffer()
+    unsubOffer?.()
 
     await pc.setRemoteDescription(offer)
     remoteSet = true
@@ -133,6 +136,10 @@ export const TargetPage = () => {
         if (!mounted) return
         setSlot(num)
         setStatus(`Device #${num} — Waiting for monitor`)
+
+        // Wipe stale signaling entries from previous sessions so onChildAdded
+        // doesn't replay old offers on every startup.
+        await cleanupAllSignaling(s.deviceId)
 
         const unsubMonitors = watchNewMonitors(s.deviceId, (monitorId) => {
           if (!s.peers[monitorId]) {

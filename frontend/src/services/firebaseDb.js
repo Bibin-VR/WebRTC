@@ -118,3 +118,7 @@ export function watchNewMonitors(deviceId, callback) {
 export async function cleanupSignaling(deviceId, monitorId) {
   await remove(ref(database, `signaling/${deviceId}/${monitorId}`))
 }
+
+export async function cleanupAllSignaling(deviceId) {
+  await remove(ref(database, `signaling/${deviceId}`))
+}

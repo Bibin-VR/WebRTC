@@ -1,29 +1,35 @@
-import { app, desktopCapturer, BrowserWindow, ipcMain, session } from 'electron'
-import path from 'path'
-import { fileURLToPath } from 'url'
+'use strict'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const { app, desktopCapturer, BrowserWindow, session, systemPreferences } = require('electron')
+const path = require('path')
 
-// Hide from dock (macOS) and taskbar
 if (app.dock) app.dock.hide()
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
-// Expose real IPs in ICE candidates — mDNS obfuscation breaks same-machine WebRTC
+// Expose real local IPs in ICE candidates — mDNS obfuscation breaks same-machine WebRTC
 app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns')
 
 app.whenReady().then(async () => {
-  // Grant screen capture permission automatically — no picker dialog
+  // Auto-capture the primary screen without showing a picker dialog
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
     desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
-      if (!sources.length) { callback({}); return }
-      callback({ video: sources[0] }) // audio loopback omitted — macOS requires extra drivers
+      if (!sources.length) {
+        if (process.platform === 'darwin') {
+          const status = systemPreferences.getMediaAccessStatus('screen')
+          if (status !== 'granted') {
+            console.error(`[daemon] Screen Recording permission is "${status}".`)
+            console.error('[daemon] Fix: System Settings → Privacy & Security → Screen Recording → enable Electron')
+          }
+        }
+        callback({})
+        return
+      }
+      callback({ video: sources[0] })
     }).catch((err) => {
       console.error('[daemon] getSources failed:', err.message)
       callback({})
     })
   })
 
-  // Hidden window — Electron needs a renderer for WebRTC
   const win = new BrowserWindow({
     show: false,
     width: 1,
@@ -36,21 +42,20 @@ app.whenReady().then(async () => {
     },
   })
 
-  // Forward all renderer console output to this process (and therefore to daemon.log)
+  // Forward renderer console output to daemon.log
   const levels = ['verbose', 'info', 'warn', 'error']
-  win.webContents.on('console-message', (_e, level, message) => {
-    console.log(`[renderer:${levels[level] ?? level}] ${message}`)
+  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    const loc = (level >= 3 && line) ? ` (${sourceId?.split('/').pop()}:${line})` : ''
+    console.log(`[renderer:${levels[level] ?? level}] ${message}${loc}`)
   })
 
-  // HashRouter expects the hash in the form #/target
+  // HashRouter: file:///.../index.html#/target → TargetPage
   await win.loadFile(path.join(__dirname, '../dist/index.html'), { hash: '/target' })
-  // Result: file:///path/to/dist/index.html#/target — HashRouter routes this to <TargetPage />
 
   console.log('[daemon] Screen sharing active.')
 })
 
-// Keep running even if window is destroyed
 app.on('window-all-closed', (e) => e.preventDefault())
 
 process.on('SIGTERM', () => { console.log('[daemon] Stopping.'); app.quit() })
-process.on('SIGINT', () => { console.log('[daemon] Stopping.'); app.quit() })
+process.on('SIGINT',  () => { console.log('[daemon] Stopping.'); app.quit() })
