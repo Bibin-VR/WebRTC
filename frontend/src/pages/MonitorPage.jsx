@@ -108,10 +108,13 @@ export const MonitorPage = () => {
     })
     s.unsubs.push(unsubIce)
 
-    // Watch for the target's answer
-    const unsubAnswer = watchAnswer(s.deviceId, s.monitorId, async (answer) => {
+    // Watch for the target's answer.
+    // `let` + optional chain: target can write the answer before watchAnswer() returns,
+    // causing Firebase to fire synchronously — `const` would TDZ in that case.
+    let unsubAnswer
+    unsubAnswer = watchAnswer(s.deviceId, s.monitorId, async (answer) => {
       if (pc.remoteDescription) return
-      unsubAnswer()
+      unsubAnswer?.()
 
       await pc.setRemoteDescription(answer)
       remoteSet = true
