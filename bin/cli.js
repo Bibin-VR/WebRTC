@@ -1,68 +1,39 @@
 #!/usr/bin/env node
 'use strict'
 
-const path = require('path')
-const fs = require('fs')
-
 const args = process.argv.slice(2)
 const command = args[0]
-const DIST = path.join(__dirname, '../frontend/dist')
-const PID_FILE = path.join(__dirname, '../.webrtc-remote.pid')
-
-function checkBuild() {
-  if (!fs.existsSync(path.join(DIST, 'index.html'))) {
-    console.error('\n  Frontend not built. Run first:\n')
-    console.error('    npm run build\n')
-    process.exit(1)
-  }
-}
-
-function isRunning(pid) {
-  try { process.kill(pid, 0); return true } catch { return false }
-}
 
 switch (command) {
-  case 'start':
-    checkBuild()
-    if (fs.existsSync(PID_FILE)) {
-      const oldPid = parseInt(fs.readFileSync(PID_FILE, 'utf8'))
-      if (isRunning(oldPid)) {
-        console.log('\n  Already running (PID ' + oldPid + '). Use "stop" first.\n')
-        process.exit(0)
-      }
-      fs.unlinkSync(PID_FILE)
-    }
-    require('./start')
+  case '-serve':
+    require('./serve')()
     break
 
-  case 'stop':
-    if (!fs.existsSync(PID_FILE)) {
-      console.log('\n  Not running.\n')
+  case '-stop': {
+    const service = require('./service')
+    if (!service.isRunning()) {
+      console.log('\n  vexRTC is not running.\n')
       process.exit(0)
     }
-    require('./stop')
+    service.uninstall()
+    console.log('\n  vexRTC stopped and removed from autostart.\n')
     break
+  }
 
-  case 'status':
-    if (fs.existsSync(PID_FILE)) {
-      const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8'))
-      if (isRunning(pid)) {
-        console.log('\n  Running (PID ' + pid + ')\n')
-      } else {
-        fs.unlinkSync(PID_FILE)
-        console.log('\n  Not running (stale PID file removed).\n')
-      }
+  case '-status': {
+    const service = require('./service')
+    if (service.isRunning()) {
+      console.log('\n  vexRTC is running.\n')
     } else {
-      console.log('\n  Not running.\n')
+      console.log('\n  vexRTC is not running.\n')
     }
     break
+  }
 
-  case 'monitor': {
-    checkBuild()
-    const slot = parseInt(args[1])
-    if (!slot || slot < 1) {
-      console.error('\n  Usage:  webrtc-remote monitor <device-number>\n')
-      console.error('  Example: webrtc-remote monitor 1\n')
+  case '-monitor': {
+    const slot = parseInt(args[1]) || 1
+    if (slot < 1) {
+      console.error('\n  Usage:  npx vexRTC -monitor [device-number]\n')
       process.exit(1)
     }
     require('./monitor')(slot)
@@ -71,17 +42,17 @@ switch (command) {
 
   default:
     console.log(`
-  webrtc-remote — zero-auth remote screen sharing
+  vexRTC — zero-auth remote screen sharing via WebRTC + Firebase
 
   Commands:
-    start          Share this screen silently (hidden background process)
-    stop           Stop sharing and kill the background process
-    status         Check if the background process is running
-    monitor <N>    View and control device #N
+    -serve            Install and start screen sharing daemon (auto-starts on reboot)
+    -stop             Stop daemon and remove from autostart
+    -status           Check if daemon is running
+    -monitor [N]      Open monitor UI for device #N (default: 1)
 
   Example workflow:
-    Industrial machine:  npx webrtc-remote start        (silently starts sharing)
-    Your laptop:         npx webrtc-remote monitor 1    (connects to device #1)
-    Industrial machine:  npx webrtc-remote stop         (stops sharing)
+    Target machine:   npx vexRTC -serve        (installs once, runs forever)
+    Monitor machine:  npx vexRTC -monitor 1    (connect to device #1)
+    Target machine:   npx vexRTC -stop         (stop sharing)
 `)
 }

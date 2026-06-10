@@ -1,17 +1,11 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
+// Legacy stop — delegates to service manager
+const service = require('./service')
 
-const PID_FILE = path.join(__dirname, '../.webrtc-remote.pid')
-
-const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8'))
-
-try {
-  process.kill(pid, 'SIGTERM')
-  console.log('\n  Stopped (PID ' + pid + ')\n')
-} catch {
-  console.log('\n  Process already stopped.\n')
+if (service.isRunning()) {
+  service.uninstall()
+  console.log('\n  vexRTC stopped and removed from autostart.\n')
+} else {
+  console.log('\n  vexRTC is not running.\n')
 }
-
-fs.unlinkSync(PID_FILE)
