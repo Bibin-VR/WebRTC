@@ -1,7 +1,6 @@
 'use strict'
 
 const { startServer } = require('./server')
-const open = require('open')
 
 module.exports = async function startMonitor(slot) {
   const { port } = await startServer()
@@ -16,5 +15,6 @@ module.exports = async function startMonitor(slot) {
   console.log('  └──────────────────────────────────────────────┘')
   console.log('')
 
+  const { default: open } = await import('open')
   await open(url)
 }
