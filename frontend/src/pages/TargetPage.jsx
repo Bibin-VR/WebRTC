@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { authReady } from '../services/firebase'
 import {
   getOrCreateDeviceId, registerDevice, setDeviceOffline,
   watchNewMonitors, watchOffer, publishAnswer,
@@ -101,6 +102,9 @@ export const TargetPage = () => {
     let mounted = true
 
     async function init() {
+      setStatus('Connecting to Firebase...')
+      await authReady
+
       setStatus('Capturing screen...')
       try {
         // In Electron daemon mode, setDisplayMediaRequestHandler auto-selects
@@ -108,7 +112,7 @@ export const TargetPage = () => {
         // In a regular browser, getDisplayMedia shows the normal picker.
         s.stream = await navigator.mediaDevices.getDisplayMedia({
           video: { frameRate: 15, width: { ideal: 1920 } },
-          audio: true,
+          audio: false, // system audio needs extra macOS drivers — video only for now
         })
         s.stream.getVideoTracks()[0].onended = () => {
           if (mounted) setStatus('Screen sharing stopped')

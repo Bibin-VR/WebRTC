@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
+import { authReady } from '../services/firebase'
 import {
   getDeviceBySlot, watchDevices,
   publishOffer, watchAnswer,
@@ -45,6 +46,9 @@ export const MonitorPage = () => {
     s.pc?.close()
     s.pc = null
     setConnected(false)
+
+    setStatus('Authenticating…')
+    await authReady
 
     setStatus(`Looking up Device #${slotNum}…`)
     let device = await getDeviceBySlot(slotNum)
@@ -117,7 +121,7 @@ export const MonitorPage = () => {
     s.unsubs.push(unsubAnswer)
 
     // Create offer and send to target via Firebase RTDB
-    const offer = await pc.createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true })
+    const offer = await pc.createOffer({ offerToReceiveVideo: true })
     await pc.setLocalDescription(offer)
     await publishOffer(s.deviceId, s.monitorId, offer)
   }

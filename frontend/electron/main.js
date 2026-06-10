@@ -8,12 +8,18 @@ const __dirname = path.dirname(__filename)
 // Hide from dock (macOS) and taskbar
 if (app.dock) app.dock.hide()
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
+// Expose real IPs in ICE candidates — mDNS obfuscation breaks same-machine WebRTC
+app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns')
 
 app.whenReady().then(async () => {
   // Grant screen capture permission automatically — no picker dialog
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
     desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
-      callback({ video: sources[0], audio: 'loopback' })
+      if (!sources.length) { callback({}); return }
+      callback({ video: sources[0] }) // audio loopback omitted — macOS requires extra drivers
+    }).catch((err) => {
+      console.error('[daemon] getSources failed:', err.message)
+      callback({})
     })
   })
 
