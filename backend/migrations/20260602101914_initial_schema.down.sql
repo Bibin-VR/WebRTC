@@ -1,4 +1,0 @@
-DROP TABLE IF EXISTS refresh_tokens;
-DROP TABLE IF EXISTS sessions;
-DROP TABLE IF EXISTS devices;
-DROP TABLE IF EXISTS users;
