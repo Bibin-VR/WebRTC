@@ -10,7 +10,19 @@ const PLIST_DIR = path.join(os.homedir(), 'Library', 'LaunchAgents')
 const PLIST_FILE = path.join(PLIST_DIR, 'com.vexrtc.serve.plist')
 
 function electronPath() {
-  return require(path.join(INSTALL_DIR, 'frontend', 'node_modules', 'electron'))
+  const electronDir = path.join(INSTALL_DIR, 'frontend', 'node_modules', 'electron')
+  const pathFile = path.join(electronDir, 'path.txt')
+  if (!fs.existsSync(pathFile)) {
+    console.error('\n  Electron is not installed. Run "npx vexrtc -serve" to install it.\n')
+    process.exit(1)
+  }
+  const rel = fs.readFileSync(pathFile, 'utf8').trim()
+  const full = path.join(electronDir, rel)
+  if (!fs.existsSync(full)) {
+    console.error('\n  Electron binary missing. Run "npx vexrtc -serve" to re-download.\n')
+    process.exit(1)
+  }
+  return full
 }
 
 function install() {
@@ -35,6 +47,8 @@ function install() {
   <dict>
     <key>ELECTRON_DISABLE_SECURITY_WARNINGS</key>
     <string>1</string>
+    <key>HOME</key>
+    <string>${os.homedir()}</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
@@ -59,9 +73,15 @@ function uninstall() {
 }
 
 function isRunning() {
+  if (!fs.existsSync(PLIST_FILE)) return false
   try {
-    const out = execSync('launchctl list com.vexrtc.serve', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-    return /^\s*\d+\s/m.test(out) // PID column is a number when running
+    const out = execSync('launchctl list com.vexrtc.serve', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    // Old tabular format (macOS < 12): "1234  0  com.vexrtc.serve"
+    // New dict format (macOS 12+):     "PID" = 12345;
+    return /^\s*\d+\s/m.test(out) || /"PID"\s*=\s*\d+/.test(out)
   } catch { return false }
 }
 

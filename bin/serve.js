@@ -28,36 +28,53 @@ function copyPackage() {
   })
 }
 
-function isElectronBinaryInstalled(frontendDir) {
-  try {
-    // require('electron') returns the path to the actual binary.
-    // If the post-install download was skipped or failed, this throws.
-    const electronExe = require(path.join(frontendDir, 'node_modules', 'electron'))
-    return fs.existsSync(electronExe)
-  } catch {
-    return false
+// Read electron/path.txt to get the actual binary path — avoids require() cache issues.
+function getElectronBinary(frontendDir) {
+  const pathFile = path.join(frontendDir, 'node_modules', 'electron', 'path.txt')
+  if (!fs.existsSync(pathFile)) return null
+  const rel = fs.readFileSync(pathFile, 'utf8').trim()
+  const full = path.join(frontendDir, 'node_modules', 'electron', rel)
+  return fs.existsSync(full) ? full : null
+}
+
+function clearMacOSQuarantine(frontendDir) {
+  if (process.platform !== 'darwin') return
+  const app = path.join(frontendDir, 'node_modules', 'electron', 'dist', 'Electron.app')
+  if (fs.existsSync(app)) {
+    spawnSync('xattr', ['-rd', 'com.apple.quarantine', app], { stdio: 'ignore' })
   }
 }
 
 function npmInstall() {
   const frontendDir = path.join(INSTALL_DIR, 'frontend')
 
-  if (isElectronBinaryInstalled(frontendDir)) {
+  if (getElectronBinary(frontendDir)) {
     console.log('  Dependencies already installed.')
     return
   }
 
-  // node_modules/electron folder may exist but the binary was never downloaded.
-  // Remove it so npm re-runs the post-install binary download.
   const electronDir = path.join(frontendDir, 'node_modules', 'electron')
-  if (fs.existsSync(electronDir)) {
-    console.log('  Electron binary missing — re-downloading (this can take a minute)...')
+  const installScript = path.join(electronDir, 'install.js')
+
+  // npm sometimes restores the electron package from cache but skips the
+  // postinstall download step, leaving path.txt absent. In that case we can
+  // run install.js directly without a full npm install cycle.
+  if (fs.existsSync(installScript)) {
+    console.log('  Electron binary missing — downloading (please wait)...')
+    spawnSync('node', [installScript], {
+      cwd: electronDir,
+      stdio: 'inherit',
+      env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '0' },
+    })
+    clearMacOSQuarantine(frontendDir)
+    if (getElectronBinary(frontendDir)) return
+    // install.js failed — delete the package and do a full reinstall
     fs.rmSync(electronDir, { recursive: true, force: true })
-  } else {
-    console.log('  Installing dependencies (downloading Electron ~120 MB, please wait)...')
   }
 
-  const result = spawnSync('npm', ['install', '--prefer-offline', '--no-audit', '--no-fund'], {
+  console.log('  Installing dependencies (downloading Electron ~120 MB, please wait)...')
+
+  const result = spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
     cwd: frontendDir,
     stdio: 'inherit',
     shell: process.platform === 'win32',
@@ -69,10 +86,20 @@ function npmInstall() {
     process.exit(1)
   }
 
-  if (!isElectronBinaryInstalled(frontendDir)) {
-    console.error('\n  Electron downloaded but binary still missing.')
-    console.error('  On Windows: antivirus / Windows Defender may be blocking the download.')
-    console.error(`  Manual fix: cd ${path.join(INSTALL_DIR, 'frontend')} && npm install\n`)
+  clearMacOSQuarantine(frontendDir)
+
+  if (!getElectronBinary(frontendDir)) {
+    const fixCmd =
+      process.platform === 'win32'
+        ? `cd %USERPROFILE%\\.vexrtc\\frontend\\node_modules\\electron && node install.js`
+        : `cd ~/.vexrtc/frontend/node_modules/electron && node install.js`
+    console.error('\n  Electron binary could not be downloaded.')
+    if (process.platform === 'win32') {
+      console.error('  Windows Defender / antivirus may be blocking the download.')
+    } else if (process.platform === 'darwin') {
+      console.error('  macOS may have blocked the download. Check your network and try again.')
+    }
+    console.error(`  Manual fix: ${fixCmd}\n`)
     process.exit(1)
   }
 }

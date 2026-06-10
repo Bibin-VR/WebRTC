@@ -10,7 +10,19 @@ const SERVICE_DIR = path.join(os.homedir(), '.config', 'systemd', 'user')
 const SERVICE_FILE = path.join(SERVICE_DIR, 'vexrtc.service')
 
 function electronPath() {
-  return require(path.join(INSTALL_DIR, 'frontend', 'node_modules', 'electron'))
+  const electronDir = path.join(INSTALL_DIR, 'frontend', 'node_modules', 'electron')
+  const pathFile = path.join(electronDir, 'path.txt')
+  if (!fs.existsSync(pathFile)) {
+    console.error('\n  Electron is not installed. Run "npx vexrtc -serve" to install it.\n')
+    process.exit(1)
+  }
+  const rel = fs.readFileSync(pathFile, 'utf8').trim()
+  const full = path.join(electronDir, rel)
+  if (!fs.existsSync(full)) {
+    console.error('\n  Electron binary missing. Run "npx vexrtc -serve" to re-download.\n')
+    process.exit(1)
+  }
+  return full
 }
 
 function install() {
@@ -57,7 +69,10 @@ function uninstall() {
 
 function isRunning() {
   try {
-    const out = execSync('systemctl --user is-active vexrtc', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    const out = execSync('systemctl --user is-active vexrtc', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
     return out.trim() === 'active'
   } catch { return false }
 }

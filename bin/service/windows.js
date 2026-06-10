@@ -10,22 +10,21 @@ const TASK_NAME = 'vexRTC-serve'
 const VBS_FILE = path.join(INSTALL_DIR, 'start-hidden.vbs')
 
 function electronPath() {
-  let exePath
-  try {
-    exePath = require(path.join(INSTALL_DIR, 'frontend', 'node_modules', 'electron'))
-  } catch (err) {
-    console.error('\n  Electron is not installed. Run "npx vexrtc -serve" again to fix this.\n')
-    console.error('  If the error persists, delete this folder and retry:')
-    console.error(`  ${path.join(INSTALL_DIR, 'frontend', 'node_modules', 'electron')}\n`)
+  const electronDir = path.join(INSTALL_DIR, 'frontend', 'node_modules', 'electron')
+  const pathFile = path.join(electronDir, 'path.txt')
+  if (!fs.existsSync(pathFile)) {
+    console.error('\n  Electron is not installed. Run "npx vexrtc -serve" to install it.\n')
     process.exit(1)
   }
-  if (!fs.existsSync(exePath)) {
-    console.error('\n  Electron binary missing from disk.')
-    console.error('  On Windows, antivirus may have removed it after download.')
-    console.error(`  Try: cd ${path.join(INSTALL_DIR, 'frontend')} && npm install\n`)
+  const rel = fs.readFileSync(pathFile, 'utf8').trim()
+  const full = path.join(electronDir, rel)
+  if (!fs.existsSync(full)) {
+    console.error('\n  Electron binary missing.')
+    console.error('  Windows Defender may have removed it after download.')
+    console.error(`  Fix: cd %USERPROFILE%\\.vexrtc\\frontend\\node_modules\\electron && node install.js\n`)
     process.exit(1)
   }
-  return exePath
+  return full
 }
 
 function install() {
