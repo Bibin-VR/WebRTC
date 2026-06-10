@@ -17,7 +17,7 @@ function electronPath() {
     process.exit(1)
   }
   const rel = fs.readFileSync(pathFile, 'utf8').trim()
-  const full = path.join(electronDir, rel)
+  const full = path.join(electronDir, 'dist', rel)
   if (!fs.existsSync(full)) {
     console.error('\n  Electron binary missing. Run "npx vexrtc -serve" to re-download.\n')
     process.exit(1)

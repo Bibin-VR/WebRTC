@@ -35,11 +35,12 @@ function removeDir(dirPath) {
 }
 
 // Read electron/path.txt to get the binary path. Avoids require() cache issues.
+// electron/index.js joins __dirname + 'dist' + path.txt, so we must too.
 function getElectronBinary(frontendDir) {
   const pathFile = path.join(frontendDir, 'node_modules', 'electron', 'path.txt')
   if (!fs.existsSync(pathFile)) return null
   const rel = fs.readFileSync(pathFile, 'utf8').trim()
-  const full = path.join(frontendDir, 'node_modules', 'electron', rel)
+  const full = path.join(frontendDir, 'node_modules', 'electron', 'dist', rel)
   return fs.existsSync(full) ? full : null
 }
 
