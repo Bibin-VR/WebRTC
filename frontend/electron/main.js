@@ -30,6 +30,12 @@ app.whenReady().then(async () => {
     },
   })
 
+  // Forward all renderer console output to this process (and therefore to daemon.log)
+  const levels = ['verbose', 'info', 'warn', 'error']
+  win.webContents.on('console-message', (_e, level, message) => {
+    console.log(`[renderer:${levels[level] ?? level}] ${message}`)
+  })
+
   // HashRouter expects the hash in the form #/target
   await win.loadFile(path.join(__dirname, '../dist/index.html'), { hash: '/target' })
   // Result: file:///path/to/dist/index.html#/target — HashRouter routes this to <TargetPage />

@@ -141,6 +141,7 @@ export const TargetPage = () => {
         })
         s.unsubs.push(unsubMonitors)
       } catch (err) {
+        console.error('[target] Firebase error:', err.message)
         if (mounted) setError(`Firebase error: ${err.message}`)
       }
     }
