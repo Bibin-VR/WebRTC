@@ -28,25 +28,51 @@ function copyPackage() {
   })
 }
 
+function isElectronBinaryInstalled(frontendDir) {
+  try {
+    // require('electron') returns the path to the actual binary.
+    // If the post-install download was skipped or failed, this throws.
+    const electronExe = require(path.join(frontendDir, 'node_modules', 'electron'))
+    return fs.existsSync(electronExe)
+  } catch {
+    return false
+  }
+}
+
 function npmInstall() {
   const frontendDir = path.join(INSTALL_DIR, 'frontend')
-  const electronBin = path.join(frontendDir, 'node_modules', 'electron')
 
-  if (fs.existsSync(electronBin)) {
+  if (isElectronBinaryInstalled(frontendDir)) {
     console.log('  Dependencies already installed.')
     return
   }
 
-  console.log('  Installing dependencies (downloading Electron ~120 MB, please wait)...')
+  // node_modules/electron folder may exist but the binary was never downloaded.
+  // Remove it so npm re-runs the post-install binary download.
+  const electronDir = path.join(frontendDir, 'node_modules', 'electron')
+  if (fs.existsSync(electronDir)) {
+    console.log('  Electron binary missing — re-downloading (this can take a minute)...')
+    fs.rmSync(electronDir, { recursive: true, force: true })
+  } else {
+    console.log('  Installing dependencies (downloading Electron ~120 MB, please wait)...')
+  }
 
   const result = spawnSync('npm', ['install', '--prefer-offline', '--no-audit', '--no-fund'], {
     cwd: frontendDir,
     stdio: 'inherit',
     shell: process.platform === 'win32',
+    env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: '0' },
   })
 
   if (result.status !== 0) {
     console.error('\n  npm install failed. Check your internet connection and try again.\n')
+    process.exit(1)
+  }
+
+  if (!isElectronBinaryInstalled(frontendDir)) {
+    console.error('\n  Electron downloaded but binary still missing.')
+    console.error('  On Windows: antivirus / Windows Defender may be blocking the download.')
+    console.error(`  Manual fix: cd ${path.join(INSTALL_DIR, 'frontend')} && npm install\n`)
     process.exit(1)
   }
 }
