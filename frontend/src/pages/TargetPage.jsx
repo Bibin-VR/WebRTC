@@ -131,8 +131,13 @@ export const TargetPage = () => {
       const platform = /Win/.test(navigator.userAgent) ? 'Windows'
         : /Mac/.test(navigator.userAgent) ? 'macOS' : 'Linux'
 
+      // Read passwordHash from config.json via Electron IPC (null in browser dev mode)
+      const config = await window.electronAPI?.getConfig?.() ?? {}
+
       try {
-        const { slot: num } = await registerDevice(navigator.userAgent.substring(0, 30), platform)
+        const { slot: num } = await registerDevice(
+          navigator.userAgent.substring(0, 30), platform, config.passwordHash ?? null,
+        )
         if (!mounted) return
         setSlot(num)
         setStatus(`Device #${num} — Waiting for monitor`)

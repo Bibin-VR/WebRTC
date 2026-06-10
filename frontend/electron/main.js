@@ -1,12 +1,21 @@
 'use strict'
 
-const { app, desktopCapturer, BrowserWindow, session, systemPreferences } = require('electron')
+const { app, desktopCapturer, BrowserWindow, ipcMain, session, systemPreferences } = require('electron')
+const fs = require('fs')
 const path = require('path')
+const os = require('os')
 
 if (app.dock) app.dock.hide()
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
 // Expose real local IPs in ICE candidates — mDNS obfuscation breaks same-machine WebRTC
 app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns')
+
+// Let the renderer request the config file (passwordHash etc.) without
+// needing nodeIntegration — avoids exposing the filesystem broadly.
+ipcMain.handle('get-config', () => {
+  const configPath = path.join(os.homedir(), '.vexrtc', 'config.json')
+  try { return JSON.parse(fs.readFileSync(configPath, 'utf8')) } catch { return {} }
+})
 
 app.whenReady().then(async () => {
   // Auto-capture the primary screen without showing a picker dialog

@@ -6,7 +6,7 @@ const command = args[0]
 
 switch (command) {
   case '-serve':
-    require('./serve')()
+    require('./serve')().catch((err) => { console.error('\n ' + err.message); process.exit(1) })
     break
 
   case '-stop': {

@@ -19,7 +19,7 @@ export function getOrCreateDeviceId() {
 // ── Device registration ──
 // Devices auto-assign the lowest available slot number (1, 2, 3...).
 
-export async function registerDevice(hostname, platform) {
+export async function registerDevice(hostname, platform, passwordHash = null) {
   const deviceId = getOrCreateDeviceId()
 
   const devRef = ref(database, `devices/${deviceId}`)
@@ -28,7 +28,9 @@ export async function registerDevice(hostname, platform) {
     const { slot } = snap.val()
     await update(devRef, {
       hostname, platform, available: true, lastSeen: serverTimestamp(),
+      ...(passwordHash && { passwordHash }),
     })
+    if (passwordHash) await set(ref(database, `slots/${slot}/passwordHash`), passwordHash)
     onDisconnect(devRef).update({ available: false, lastSeen: serverTimestamp() })
     return { deviceId, slot }
   }
@@ -42,7 +44,9 @@ export async function registerDevice(hostname, platform) {
 
   await set(devRef, {
     slot, hostname, platform, available: true, lastSeen: serverTimestamp(),
+    ...(passwordHash && { passwordHash }),
   })
+  if (passwordHash) await set(ref(database, `slots/${slot}/passwordHash`), passwordHash)
   onDisconnect(devRef).update({ available: false, lastSeen: serverTimestamp() })
   return { deviceId, slot }
 }

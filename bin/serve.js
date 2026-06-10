@@ -6,6 +6,7 @@ const path = require('path')
 const os = require('os')
 
 const INSTALL_DIR = path.join(os.homedir(), '.vexrtc')
+const CONFIG_FILE = path.join(INSTALL_DIR, 'config.json')
 const PKG_DIR = path.join(__dirname, '..')
 const NEVER_COPY = new Set(['node_modules', '.git', '.gitignore', '.webrtc-remote.pid', '.webrtc-remote.log'])
 
@@ -130,10 +131,53 @@ function buildFrontend() {
   }
 }
 
-module.exports = function serve() {
+async function setupPassword() {
+  const { promptHidden, sha256 } = require('./prompt')
+
+  let config = {}
+  try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) } catch { /* first run */ }
+
+  console.log('')
+
+  if (config.passwordHash) {
+    console.log('  A connection password is already set.')
+    const change = await promptHidden('  Change it? (y/N): ')
+    process.stdout.write('\n')
+    if (!change.trim().toLowerCase().startsWith('y')) {
+      console.log('  Password unchanged.')
+      return
+    }
+  } else {
+    console.log('  Set a password — monitors will need it to connect.')
+  }
+
+  let pw
+  for (;;) {
+    pw = await promptHidden('  Password: ')
+    if (!pw) { console.log('  Password cannot be empty.'); continue }
+    const confirm = await promptHidden('  Confirm:  ')
+    if (pw === confirm) break
+    console.log('  Passwords do not match. Try again.')
+  }
+
+  config.passwordHash = sha256(pw)
+  fs.mkdirSync(INSTALL_DIR, { recursive: true })
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2))
+  console.log('  Password set.\n')
+}
+
+module.exports = async function serve() {
   // Re-spawn as a completely detached background process so the calling
   // terminal is freed immediately. All install output goes to install.log.
   if (!process.env.VEXRTC_BG) {
+    console.log('')
+    console.log('  ┌──────────────────────────────────────────────┐')
+    console.log('  │   vexRTC  ·  Screen Share Setup              │')
+    console.log('  └──────────────────────────────────────────────┘')
+
+    // Password must be set before spawning the background worker
+    await setupPassword()
+
     fs.mkdirSync(INSTALL_DIR, { recursive: true })
     const logFile = path.join(INSTALL_DIR, 'install.log')
     const logFd = fs.openSync(logFile, 'w')
@@ -151,11 +195,6 @@ module.exports = function serve() {
       ? '%USERPROFILE%\\.vexrtc\\install.log'
       : '~/.vexrtc/install.log'
 
-    console.log('')
-    console.log('  ┌──────────────────────────────────────────────┐')
-    console.log('  │   vexRTC  ·  Screen Share Setup              │')
-    console.log('  └──────────────────────────────────────────────┘')
-    console.log('')
     console.log('  Installing in the background.')
     console.log('  First run downloads Electron (~120 MB) — takes 1-2 min.')
     console.log(`  Progress: ${logPath}`)
