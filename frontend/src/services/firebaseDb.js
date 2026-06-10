@@ -1,149 +1,120 @@
 import { database } from './firebase'
 import {
   ref, set, get, update, remove, push,
-  onValue, off, query, orderByChild, equalTo,
-  serverTimestamp,
+  onValue, onChildAdded, onDisconnect, serverTimestamp,
 } from 'firebase/database'
 
-// ── Users ──
+// ── Device identity ──
+// Each machine gets a UUID stored in localStorage so it keeps the same slot number.
 
-export async function createUserProfile(uid, email, displayName) {
-  await set(ref(database, `users/${uid}`), {
-    email,
-    displayName,
-    createdAt: serverTimestamp(),
-  })
-}
-
-export async function getUserProfile(uid) {
-  const snap = await get(ref(database, `users/${uid}`))
-  return snap.exists() ? { id: uid, ...snap.val() } : null
-}
-
-export async function updateUserProfile(uid, fields) {
-  await update(ref(database, `users/${uid}`), fields)
-}
-
-export async function searchUsers(searchQuery) {
-  const snap = await get(ref(database, 'users'))
-  if (!snap.exists()) return []
-  const results = []
-  const q = searchQuery.toLowerCase()
-  snap.forEach((child) => {
-    const u = child.val()
-    if (
-      u.displayName?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q)
-    ) {
-      results.push({ id: child.key, ...u })
-    }
-  })
-  return results
-}
-
-// ── Devices ──
-
-export async function registerDevice(uid, deviceName, platform) {
-  const devRef = push(ref(database, `devices/${uid}`))
-  const device = {
-    deviceName,
-    platform,
-    isOnline: true,
-    lastSeen: serverTimestamp(),
-    createdAt: serverTimestamp(),
+export function getOrCreateDeviceId() {
+  let id = localStorage.getItem('webrtc-remote-device-id')
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem('webrtc-remote-device-id', id)
   }
-  await set(devRef, device)
-  return { id: devRef.key, ...device }
+  return id
 }
 
-export async function listDevices(uid) {
-  const snap = await get(ref(database, `devices/${uid}`))
-  if (!snap.exists()) return []
-  const devices = []
-  snap.forEach((child) => devices.push({ id: child.key, ...child.val() }))
-  return devices
-}
+// ── Device registration ──
+// Devices auto-assign the lowest available slot number (1, 2, 3...).
 
-export async function setDeviceOnline(uid, deviceId, online) {
-  await update(ref(database, `devices/${uid}/${deviceId}`), {
-    isOnline: online,
-    lastSeen: serverTimestamp(),
-  })
-}
+export async function registerDevice(hostname, platform) {
+  const deviceId = getOrCreateDeviceId()
 
-export async function deleteDevice(uid, deviceId) {
-  await remove(ref(database, `devices/${uid}/${deviceId}`))
-}
-
-// ── Presence ──
-
-export function watchOnlineUsers(callback) {
-  const presRef = ref(database, 'presence')
-  const unsub = onValue(presRef, (snap) => {
-    callback(snap.val() || {})
-  })
-  return () => off(presRef, 'value', unsub)
-}
-
-export async function goOnline(uid, displayName) {
-  await set(ref(database, `presence/${uid}`), {
-    displayName,
-    online: true,
-    lastSeen: serverTimestamp(),
-  })
-}
-
-export async function goOffline(uid) {
-  await remove(ref(database, `presence/${uid}`))
-}
-
-// ── Sessions ──
-
-export async function createSession(initiatorId, targetUserId) {
-  const sessRef = push(ref(database, 'sessions'))
-  const session = {
-    initiatorId,
-    targetUserId,
-    status: 'pending',
-    createdAt: serverTimestamp(),
-  }
-  await set(sessRef, session)
-  return { id: sessRef.key, ...session }
-}
-
-export async function getSession(sessionId) {
-  const snap = await get(ref(database, `sessions/${sessionId}`))
-  return snap.exists() ? { id: sessionId, ...snap.val() } : null
-}
-
-export async function endSession(sessionId) {
-  await update(ref(database, `sessions/${sessionId}`), {
-    status: 'ended',
-    endedAt: serverTimestamp(),
-  })
-}
-
-// ── Incoming call notifications ──
-
-export function watchIncomingCalls(uid, callback) {
-  const q = query(ref(database, 'sessions'), orderByChild('targetUserId'), equalTo(uid))
-  const unsub = onValue(q, (snap) => {
-    const calls = []
-    snap.forEach((child) => {
-      const s = child.val()
-      if (s.status === 'pending') {
-        calls.push({ id: child.key, ...s })
-      }
+  const devRef = ref(database, `devices/${deviceId}`)
+  const snap = await get(devRef)
+  if (snap.exists() && snap.val().slot) {
+    const { slot } = snap.val()
+    await update(devRef, {
+      hostname, platform, available: true, lastSeen: serverTimestamp(),
     })
-    callback(calls)
+    onDisconnect(devRef).update({ available: false, lastSeen: serverTimestamp() })
+    return { deviceId, slot }
+  }
+
+  const all = await get(ref(database, 'devices'))
+  const used = new Set()
+  if (all.exists()) all.forEach((c) => { if (c.val().slot) used.add(c.val().slot) })
+
+  let slot = 1
+  while (used.has(slot)) slot++
+
+  await set(devRef, {
+    slot, hostname, platform, available: true, lastSeen: serverTimestamp(),
   })
-  return () => off(q, 'value', unsub)
+  onDisconnect(devRef).update({ available: false, lastSeen: serverTimestamp() })
+  return { deviceId, slot }
 }
 
-export async function acceptSession(sessionId) {
-  await update(ref(database, `sessions/${sessionId}`), { status: 'active' })
+export async function setDeviceOffline(deviceId) {
+  await update(ref(database, `devices/${deviceId}`), {
+    available: false, lastSeen: serverTimestamp(),
+  })
 }
 
-export async function rejectSession(sessionId) {
-  await update(ref(database, `sessions/${sessionId}`), { status: 'rejected' })
+export function watchDevices(callback) {
+  const r = ref(database, 'devices')
+  return onValue(r, (snap) => {
+    const devices = []
+    if (snap.exists()) {
+      snap.forEach((c) => { const v = c.val(); if (v.available) devices.push({ id: c.key, ...v }) })
+    }
+    callback(devices.sort((a, b) => a.slot - b.slot))
+  })
+}
+
+export async function getDeviceBySlot(slot) {
+  const snap = await get(ref(database, 'devices'))
+  if (!snap.exists()) return null
+  let found = null
+  snap.forEach((c) => {
+    const v = c.val()
+    if (v.slot === slot && v.available) found = { id: c.key, ...v }
+  })
+  return found
+}
+
+// ── Signaling ──
+// Path: signaling/<deviceId>/<monitorId>/offer|answer|targetCandidates|monitorCandidates
+
+export async function publishOffer(deviceId, monitorId, sdp) {
+  await set(ref(database, `signaling/${deviceId}/${monitorId}/offer`), sdp)
+}
+
+export async function publishAnswer(deviceId, monitorId, sdp) {
+  await set(ref(database, `signaling/${deviceId}/${monitorId}/answer`), sdp)
+}
+
+export function watchOffer(deviceId, monitorId, callback) {
+  return onValue(ref(database, `signaling/${deviceId}/${monitorId}/offer`), (snap) => {
+    if (snap.exists()) callback(snap.val())
+  })
+}
+
+export function watchAnswer(deviceId, monitorId, callback) {
+  return onValue(ref(database, `signaling/${deviceId}/${monitorId}/answer`), (snap) => {
+    if (snap.exists()) callback(snap.val())
+  })
+}
+
+export async function addIceCandidate(deviceId, monitorId, side, candidate) {
+  await set(push(ref(database, `signaling/${deviceId}/${monitorId}/${side}Candidates`)), candidate)
+}
+
+// onChildAdded fires for existing children first, then new ones — perfect for ICE buffering
+export function watchIceCandidates(deviceId, monitorId, side, callback) {
+  return onChildAdded(
+    ref(database, `signaling/${deviceId}/${monitorId}/${side}Candidates`),
+    (snap) => { if (snap.exists()) callback(snap.val()) },
+  )
+}
+
+// Target watches for any new monitor session appearing under its signaling path
+export function watchNewMonitors(deviceId, callback) {
+  return onChildAdded(ref(database, `signaling/${deviceId}`), (snap) => callback(snap.key))
+}
+
+export async function cleanupSignaling(deviceId, monitorId) {
+  await remove(ref(database, `signaling/${deviceId}/${monitorId}`))
 }

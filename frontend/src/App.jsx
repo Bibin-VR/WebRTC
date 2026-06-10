@@ -1,41 +1,18 @@
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from './hooks/useAuth'
-import { AuthPages } from './pages/Auth'
-import { Dashboard } from './pages/Dashboard'
-import { CallPage } from './pages/CallPage'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { TargetPage } from './pages/TargetPage'
+import { MonitorPage } from './pages/MonitorPage'
 import './App.css'
 
 function App() {
-  const { isAuthenticated, loading, initAuth } = useAuthStore()
-
-  useEffect(() => {
-    initAuth()
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="app loading">
-        <div className="loader"></div>
-      </div>
-    )
-  }
-
   return (
     <div className="app">
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
-          {!isAuthenticated ? (
-            <Route path="/*" element={<AuthPages />} />
-          ) : (
-            <>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/call/:sessionId" element={<CallPage />} />
-              <Route path="/*" element={<Navigate to="/dashboard" replace />} />
-            </>
-          )}
+          <Route path="/target" element={<TargetPage />} />
+          <Route path="/monitor/:slot" element={<MonitorPage />} />
+          <Route path="/*" element={<Navigate to="/target" replace />} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </div>
   )
 }

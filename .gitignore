@@ -84,3 +84,6 @@ secrets/
 # Cache
 .cache/
 cache/
+
+# Daemon
+.webrtc-remote.pid
