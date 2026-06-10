@@ -1,26 +1,24 @@
 {
-  "name": "vexRTC",
+  "name": "vexrtc",
   "version": "1.0.0",
   "description": "Zero-auth remote screen sharing via WebRTC + Firebase — one command to install",
   "bin": {
-    "vexRTC": "./bin/cli.js"
+    "vexRTC": "./bin/cli.js",
+    "vexrtc": "./bin/cli.js"
   },
   "scripts": {
     "build": "npm --prefix frontend run build",
-    "prepublishOnly": "npm --prefix frontend install && npm run build",
+    "prepublishOnly": "npm run build",
     "start": "node bin/cli.js -serve",
     "monitor": "node bin/cli.js -monitor"
   },
   "files": [
     "bin/",
-    "frontend/src/",
     "frontend/electron/",
-    "frontend/public/",
     "frontend/dist/",
     "frontend/package.json",
-    "frontend/vite.config.js",
-    "frontend/index.html",
-    "frontend/.env.example"
+    "frontend/package-lock.json",
+    "README.md"
   ],
   "dependencies": {
     "express": "^4.18.0",
