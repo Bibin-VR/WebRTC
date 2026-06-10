@@ -5,11 +5,14 @@ const path = require('path')
 const fs = require('fs')
 
 const PID_FILE = path.join(__dirname, '../.webrtc-remote.pid')
-const ELECTRON = path.join(__dirname, '../frontend/node_modules/.bin/electron')
 const MAIN = path.join(__dirname, '../frontend/electron/main.js')
 const LOG_FILE = path.join(__dirname, '../.webrtc-remote.log')
 
-if (!fs.existsSync(ELECTRON)) {
+// require('electron') returns the path to the correct binary for the current platform
+let ELECTRON
+try {
+  ELECTRON = require(path.join(__dirname, '../frontend/node_modules/electron'))
+} catch {
   console.error('\n  Electron not found. Run:  npm install --prefix frontend\n')
   process.exit(1)
 }

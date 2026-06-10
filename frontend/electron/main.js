@@ -30,8 +30,9 @@ app.whenReady().then(async () => {
     },
   })
 
-  // Load the built frontend's target page
+  // HashRouter expects the hash in the form #/target
   await win.loadFile(path.join(__dirname, '../dist/index.html'), { hash: '/target' })
+  // Result: file:///path/to/dist/index.html#/target — HashRouter routes this to <TargetPage />
 
   console.log('[daemon] Screen sharing active.')
 })
