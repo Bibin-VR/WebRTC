@@ -84,7 +84,7 @@ module.exports = function serve() {
 
   if (service.isRunning()) {
     console.log('  Already running.')
-    console.log('  Use "npx vexRTC -stop" to stop the daemon first.\n')
+    console.log('  Use "npx vexrtc -stop" to stop the daemon first.\n')
     process.exit(0)
   }
 
@@ -108,7 +108,7 @@ module.exports = function serve() {
   console.log('  ✓  Auto-starts on every reboot.')
   console.log('')
   console.log('  Logs:    ~/.vexrtc/daemon.log')
-  console.log('  Stop:    npx vexRTC -stop')
-  console.log('  Watch:   npx vexRTC -monitor 1')
+  console.log('  Stop:    npx vexrtc -stop')
+  console.log('  Watch:   npx vexrtc -monitor 1')
   console.log('')
 }

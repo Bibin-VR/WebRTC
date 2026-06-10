@@ -14,7 +14,7 @@ Zero-auth remote screen sharing via WebRTC + Firebase. One command to install �
 ### Target machine (screen to be shared)
 
 ```bash
-npx vexRTC -serve
+npx vexrtc -serve
 ```
 
 This installs once to `~/.vexrtc/`, registers an OS autostart service, and starts the daemon in the background. The screen is shared silently — no window, no taskbar icon, no dock entry.
@@ -24,7 +24,7 @@ This installs once to `~/.vexrtc/`, registers an OS autostart service, and start
 ### Monitor machine (viewing)
 
 ```bash
-npx vexRTC -monitor 1
+npx vexrtc -monitor 1
 ```
 
 Opens a browser tab connected to device #1. Use `-monitor 2` for device #2, and so on.
@@ -34,7 +34,7 @@ No installation required on the monitor machine.
 ### Stop sharing
 
 ```bash
-npx vexRTC -stop
+npx vexrtc -stop
 ```
 
 Stops the daemon and removes it from autostart.
@@ -42,7 +42,7 @@ Stops the daemon and removes it from autostart.
 ### Check status
 
 ```bash
-npx vexRTC -status
+npx vexrtc -status
 ```
 
 ---
@@ -51,10 +51,10 @@ npx vexRTC -status
 
 | Command | Description |
 |---|---|
-| `npx vexRTC -serve` | Install and start screen sharing daemon |
-| `npx vexRTC -stop` | Stop daemon and remove autostart |
-| `npx vexRTC -status` | Check if daemon is running |
-| `npx vexRTC -monitor [N]` | Open monitor UI for device #N (default: 1) |
+| `npx vexrtc -serve` | Install and start screen sharing daemon |
+| `npx vexrtc -stop` | Stop daemon and remove autostart |
+| `npx vexrtc -status` | Check if daemon is running |
+| `npx vexrtc -monitor [N]` | Open monitor UI for device #N (default: 1) |
 
 ---
 
@@ -75,7 +75,7 @@ The daemon restarts automatically if it crashes (`Restart=always` / `KeepAlive: 
 ```
 Target machine                          Monitor machine
 ┌─────────────────────┐                ┌─────────────────────┐
-│  Electron daemon     │                │  npx vexRTC -monitor│
+│  Electron daemon     │                │  npx vexrtc -monitor│
 │  (hidden, no UI)     │                │  Express + browser  │
 │                      │◄──── WebRTC ──►│                     │
 │  getDisplayMedia()   │   P2P video    │  <video> fullscreen │
@@ -95,7 +95,7 @@ Target machine                          Monitor machine
 
 ## Install details
 
-On first `npx vexRTC -serve`:
+On first `npx vexrtc -serve`:
 
 1. Copies package files to `~/.vexrtc/` (stable path for the OS service)
 2. Runs `npm install` in `~/.vexrtc/frontend/` (downloads Electron, ~120 MB)
@@ -121,10 +121,10 @@ Logs are written to `~/.vexrtc/daemon.log`.
 
 ```
 Factory floor / industrial machine:
-  → run once:  npx vexRTC -serve
+  → run once:  npx vexrtc -serve
   → machine is now always available for remote connection
 
 Engineer's laptop (anywhere in the world):
-  → npx vexRTC -monitor 1
+  → npx vexrtc -monitor 1
   → browser opens, full screen video + mouse/keyboard control
 ```

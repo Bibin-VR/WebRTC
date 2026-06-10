@@ -33,7 +33,7 @@ switch (command) {
   case '-monitor': {
     const slot = parseInt(args[1]) || 1
     if (slot < 1) {
-      console.error('\n  Usage:  npx vexRTC -monitor [device-number]\n')
+      console.error('\n  Usage:  npx vexrtc -monitor [device-number]\n')
       process.exit(1)
     }
     require('./monitor')(slot)
@@ -51,8 +51,8 @@ switch (command) {
     -monitor [N]      Open monitor UI for device #N (default: 1)
 
   Example workflow:
-    Target machine:   npx vexRTC -serve        (installs once, runs forever)
-    Monitor machine:  npx vexRTC -monitor 1    (connect to device #1)
-    Target machine:   npx vexRTC -stop         (stop sharing)
+    Target machine:   npx vexrtc -serve        (installs once, runs forever)
+    Monitor machine:  npx vexrtc -monitor 1    (connect to device #1)
+    Target machine:   npx vexrtc -stop         (stop sharing)
 `)
 }

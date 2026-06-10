@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Zero-auth remote screen sharing via WebRTC + Firebase — one command to install",
   "bin": {
-    "vexRTC": "./bin/cli.js",
     "vexrtc": "./bin/cli.js"
   },
   "scripts": {
