@@ -30,6 +30,12 @@ function install() {
   const mainJs = path.join(INSTALL_DIR, 'frontend', 'electron', 'main.js')
   const logFile = path.join(INSTALL_DIR, 'daemon.log')
 
+  // Clear Gatekeeper quarantine so launchd can execute the downloaded binary
+  const app = path.join(INSTALL_DIR, 'frontend', 'node_modules', 'electron', 'dist', 'Electron.app')
+  if (fs.existsSync(app)) {
+    require('child_process').spawnSync('xattr', ['-rd', 'com.apple.quarantine', app], { stdio: 'ignore' })
+  }
+
   fs.mkdirSync(PLIST_DIR, { recursive: true })
 
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
