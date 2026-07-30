@@ -1,64 +1,72 @@
 # vexRTC
 
-Zero-auth remote screen sharing via WebRTC + Firebase. One command to install — works across the internet.
+**Zero-auth remote screen sharing over WebRTC.** One command to install, works across
+the internet.
 
-## How it works
-
-- **Target machine** shares its screen silently as a hidden background daemon
-- **Monitor machine** connects by device number and gets full mouse/keyboard control
-- Signaling via Firebase Realtime Database — no server to run or maintain
-- Peer-to-peer video via WebRTC — Firebase only brokers the connection, video never touches it
+A target machine shares its screen as a hidden background daemon. A monitor machine
+connects by device number and gets full mouse and keyboard control. Firebase brokers the
+connection; the video itself is peer-to-peer and never passes through it.
 
 ## Quick start
 
-### Target machine (screen to be shared)
+**On the machine to be shared:**
 
 ```bash
 npx vexrtc -serve
 ```
 
-This installs once to `~/.vexrtc/`, registers an OS autostart service, and starts the daemon in the background. The screen is shared silently — no window, no taskbar icon, no dock entry.
+Installs once to `~/.vexrtc/`, registers an OS autostart service, and starts the daemon
+in the background. The screen is shared silently — no window, no taskbar icon, no dock
+entry. It **auto-starts on every reboot** and only stops when you run `-stop`.
 
-**Auto-starts on every reboot.** Only stops when you explicitly run `-stop`.
-
-### Monitor machine (viewing)
+**On the machine doing the viewing:**
 
 ```bash
 npx vexrtc -monitor 1
 ```
 
 Opens a browser tab connected to device #1. Use `-monitor 2` for device #2, and so on.
+No installation is required on the monitor machine.
 
-No installation required on the monitor machine.
-
-### Stop sharing
+**To stop sharing:**
 
 ```bash
 npx vexrtc -stop
 ```
 
-Stops the daemon and removes it from autostart.
-
-### Check status
-
-```bash
-npx vexrtc -status
-```
-
----
-
 ## Commands
 
 | Command | Description |
 |---|---|
-| `npx vexrtc -serve` | Install and start screen sharing daemon |
-| `npx vexrtc -stop` | Stop daemon and remove autostart |
-| `npx vexrtc -status` | Check if daemon is running |
-| `npx vexrtc -monitor [N]` | Open monitor UI for device #N (default: 1) |
+| `npx vexrtc -serve` | Install and start the screen-sharing daemon |
+| `npx vexrtc -stop` | Stop the daemon and remove it from autostart |
+| `npx vexrtc -status` | Check whether the daemon is running |
+| `npx vexrtc -monitor [N]` | Open the monitor UI for device #N (default: 1) |
 
----
+## Architecture
 
-## Autostart behaviour
+```
+Target machine                          Monitor machine
+┌─────────────────────┐                ┌─────────────────────┐
+│  Electron daemon    │                │ npx vexrtc -monitor │
+│  (hidden, no UI)    │                │  Express + browser  │
+│                     │◄──── WebRTC ──►│                     │
+│  getDisplayMedia()  │   P2P video    │  <video> fullscreen │
+│  auto-captures      │   + data chan  │  mouse/kb events    │
+│  primary screen     │                │  → data channel     │
+└─────────┬───────────┘                └──────────┬──────────┘
+          │                                       │
+          └──────── Firebase RTDB signaling ──────┘
+                  (offer / answer / ICE only)
+```
+
+**Device slots.** Each target machine is assigned a slot number (1, 2, 3…) stored in
+Firebase. Monitors connect by slot number, not by user account — no authentication is
+required.
+
+**Signaling:** Firebase RTDB at `https://tovex-eab23-default-rtdb.firebaseio.com/`
+
+## Autostart
 
 | Platform | Mechanism | Survives reboot |
 |---|---|---|
@@ -68,63 +76,37 @@ npx vexrtc -status
 
 The daemon restarts automatically if it crashes (`Restart=always` / `KeepAlive: true`).
 
----
+## What the install does
 
-## Architecture
+On the first `npx vexrtc -serve`:
 
-```
-Target machine                          Monitor machine
-┌─────────────────────┐                ┌─────────────────────┐
-│  Electron daemon     │                │  npx vexrtc -monitor│
-│  (hidden, no UI)     │                │  Express + browser  │
-│                      │◄──── WebRTC ──►│                     │
-│  getDisplayMedia()   │   P2P video    │  <video> fullscreen │
-│  auto-captures       │   + data chan  │  mouse/kb events    │
-│  primary screen      │                │  → data channel     │
-└─────────┬───────────┘                └──────────┬──────────┘
-          │                                        │
-          └──────── Firebase RTDB signaling ───────┘
-                  (offer / answer / ICE only)
-```
-
-**Device slots** — each target machine is assigned a slot number (1, 2, 3…) stored in Firebase. Monitors connect by slot number, not by user account. No authentication required.
-
-**Firebase RTDB:** `https://tovex-eab23-default-rtdb.firebaseio.com/`
-
----
-
-## Install details
-
-On first `npx vexrtc -serve`:
-
-1. Copies package files to `~/.vexrtc/` (stable path for the OS service)
-2. Runs `npm install` in `~/.vexrtc/frontend/` (downloads Electron, ~120 MB)
-3. Builds the React frontend with Vite (skipped if pre-built dist is bundled)
+1. Copies package files to `~/.vexrtc/` — a stable path for the OS service
+2. Runs `npm install` in `~/.vexrtc/frontend/` (downloads Electron, roughly 120 MB)
+3. Builds the React frontend with Vite — skipped if a pre-built `dist` is bundled
 4. Registers and starts the OS autostart service
 
-Subsequent runs skip steps 2 and 3 if the dependencies and build are already present.
-
+Subsequent runs skip steps 2 and 3 when the dependencies and build are already present.
 Logs are written to `~/.vexrtc/daemon.log`.
-
----
 
 ## Requirements
 
-- **Node.js 18+** on the target machine (for the install step)
-- No Node.js required on the monitor machine after the npm package is downloaded
+- **Node.js 18+** on the target machine, for the install step
+- No Node.js needed on the monitor machine once the npm package is downloaded
 - Internet access to Firebase RTDB for signaling
-- Direct P2P path or STUN/TURN for video (standard WebRTC ICE)
-
----
+- A direct P2P path, or STUN/TURN, for video — standard WebRTC ICE
 
 ## Typical deployment
 
 ```
-Factory floor / industrial machine:
+Factory floor / industrial machine
   → run once:  npx vexrtc -serve
-  → machine is now always available for remote connection
+  → the machine is now always available for remote connection
 
-Engineer's laptop (anywhere in the world):
+Engineer's laptop, anywhere in the world
   → npx vexrtc -monitor 1
-  → browser opens, full screen video + mouse/keyboard control
+  → browser opens with full-screen video and mouse/keyboard control
 ```
+
+## License
+
+MIT
